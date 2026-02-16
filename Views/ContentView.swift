@@ -416,9 +416,6 @@ struct ContentView: View {
                                     Button("Editar") { edit(row: row) }
                                     Button("Excluir", role: .destructive) { delete(row: row) }
                                 }
-                                .onTapGesture {
-                                    selectedAccessId = row.id
-                                }
                                 .onTapGesture(count: 2) {
                                     selectedAccessId = row.id
                                     open(row: row)
