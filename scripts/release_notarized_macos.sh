@@ -96,6 +96,9 @@ if [[ -z "$DEV_ID_APP_CERT" ]]; then
   exit 1
 fi
 
+log "Preflight checklist automático"
+bash scripts/release_preflight.sh "$VERSION"
+
 mkdir -p "$DIST_DIR" "$NOTARY_LOG_DIR"
 
 log "Build release SwiftPM"

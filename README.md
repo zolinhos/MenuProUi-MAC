@@ -329,6 +329,8 @@ export NOTARY_PROFILE="notary-profile"
 bash scripts/release_notarized_macos.sh 1.7.3
 ```
 
+O fluxo notarizado também executa automaticamente o preflight checklist (`scripts/release_preflight.sh`) antes de iniciar o empacotamento/notarização.
+
 Validação final:
 
 ```bash
