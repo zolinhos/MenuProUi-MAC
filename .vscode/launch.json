@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:MenuProUi-MAC}",
+            "name": "Debug MenuProUI-MAC",
+            "target": "MenuProUI-MAC",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug MenuProUI-MAC"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:MenuProUi-MAC}",
+            "name": "Release MenuProUI-MAC",
+            "target": "MenuProUI-MAC",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release MenuProUI-MAC"
+        }
+    ]
+}

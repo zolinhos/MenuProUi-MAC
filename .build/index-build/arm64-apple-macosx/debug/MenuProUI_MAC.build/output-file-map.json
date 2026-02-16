@@ -1,0 +1,124 @@
+{
+  "": {
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/master.swiftdeps"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Dialogs/AddClientView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddClientView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddClientView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddClientView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddClientView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddClientView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Dialogs/AddRDPView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddRDPView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddRDPView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddRDPView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddRDPView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddRDPView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Dialogs/AddSSHView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddSSHView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddSSHView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddSSHView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddSSHView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddSSHView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Dialogs/AddURLView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddURLView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddURLView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddURLView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddURLView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/AddURLView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Dialogs/EditClientView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditClientView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditClientView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditClientView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditClientView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditClientView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Dialogs/EditRDPView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditRDPView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditRDPView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditRDPView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditRDPView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditRDPView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Dialogs/EditSSHView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditSSHView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditSSHView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditSSHView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditSSHView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditSSHView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Dialogs/EditURLView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditURLView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditURLView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditURLView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditURLView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/EditURLView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/MenuAcessosProUIApp.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/MenuAcessosProUIApp.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/MenuAcessosProUIApp.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/MenuAcessosProUIApp~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/MenuAcessosProUIApp.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/MenuAcessosProUIApp.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Models/Models.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/Models.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/Models.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/Models~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/Models.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/Models.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Services/CSVStore.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/CSVStore.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/CSVStore.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/CSVStore~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/CSVStore.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/CSVStore.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Services/LogParser.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/LogParser.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/LogParser.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/LogParser~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/LogParser.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/LogParser.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Services/RDPFileWriter.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/RDPFileWriter.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/RDPFileWriter.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/RDPFileWriter~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/RDPFileWriter.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/RDPFileWriter.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Services/SSHLauncher.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/SSHLauncher.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/SSHLauncher.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/SSHLauncher~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/SSHLauncher.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/SSHLauncher.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Services/URLLauncher.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/URLLauncher.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/URLLauncher.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/URLLauncher~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/URLLauncher.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/URLLauncher.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/Views/ContentView.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/ContentView.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/ContentView.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/ContentView~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/ContentView.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/ContentView.dia"
+  },
+  "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/DerivedSources/resource_bundle_accessor.swift": {
+    "dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/resource_bundle_accessor.d",
+    "object": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/resource_bundle_accessor.swift.o",
+    "swiftmodule": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/resource_bundle_accessor~partial.swiftmodule",
+    "swift-dependencies": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/resource_bundle_accessor.swiftdeps",
+    "diagnostics": "/Users/adriano/Documents/Projetos/MenuProUi-MAC/.build/index-build/arm64-apple-macosx/debug/MenuProUI_MAC.build/resource_bundle_accessor.dia"
+  }
+}

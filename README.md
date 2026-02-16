@@ -1,0 +1,365 @@
+# MenuProUI-MAC
+
+Aplicativo **macOS** (SwiftUI) para centralizar, organizar e abrir acessos de infraestrutura por **cliente**, suportando:
+
+- **SSH** (host, usuário e **porta digitável**)
+- **RDP** (host, usuário/domínio e **porta digitável**, com geração de `.rdp`)
+- **HTTPS (URL)** para consoles web (Firewall, VMware, etc.), com **porta padrão 443** e suporte a portas customizadas
+
+Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI/`.
+
+---
+
+## ✅ Principais recursos
+
+### Clientes
+- Cadastrar cliente (ID, Nome, Tags)
+- Editar cliente
+- Apagar cliente (com opção de **cascata**, removendo acessos vinculados)
+
+### Acessos por cliente
+- **SSH**
+  - Cadastrar (alias, nome, host, **porta**, usuário, tags)
+  - Abrir com 1 clique
+  - Editar e apagar
+- **RDP**
+  - Cadastrar (alias, nome, host, **porta**, domínio opcional, usuário, tags)
+  - Abrir com 1 clique (gera `.rdp`)
+  - Editar e apagar
+  - Porta customizada gravada corretamente via `server port:i:PORT`
+- **HTTPS**
+  - Cadastrar URL completa (ex.: `https://firewall.voceconfia.com.br:4444`)
+  - Porta padrão **443** caso não seja informada
+  - Abrir no navegador padrão
+  - Editar e apagar
+
+### Interface
+- Tema escuro (azul/preto)
+- Lista de clientes na lateral (NavigationSplitView)
+- Ações rápidas (Adicionar / Abrir / Editar / Apagar)
+- (Opcional) gráficos/estatísticas se `LogParser` estiver ativo
+
+---
+
+## 🧩 Tecnologias
+
+- SwiftUI
+- Combine (para `ObservableObject` / `@Published`)
+- Charts (para gráfico, quando habilitado)
+- AppKit (via `NSWorkspace` para abrir SSH/HTTPS e `.rdp`)
+
+---
+
+## ✅ Requisitos
+
+- macOS (Apple Silicon / Intel)
+- Xcode 15+ (recomendado)
+- Swift 5.9+ (recomendado)
+
+---
+
+## 🚀 Como rodar (desenvolvimento)
+
+1. Clone o repositório:
+
+   ```bash
+   git clone <URL_DO_REPO>
+   cd <PASTA_DO_REPO>
+   ```
+
+2. Build via SwiftPM:
+
+  ```bash
+  swift build
+  ```
+
+3. Rodar local:
+
+  ```bash
+  swift run
+  ```
+
+4. Opcional (Xcode):
+  - `File` → `Open...` e abra a pasta do projeto
+  - Execute com `Run` (⌘R)
+
+---
+
+## ⌨️ Atalhos de teclado
+
+Atalhos úteis implementados na interface:
+
+- `⌘R` → Atualizar dados
+- `⌘N` → Novo Cliente
+- `⇧⌘N` → Novo Acesso
+- `↩︎` → Abrir acesso selecionado
+- `⌘E` → Editar acesso selecionado
+- `⌫` → Excluir acesso selecionado
+- `⌘/` → Abrir Ajuda
+- No diálogo **Novo acesso**:
+  - `⌘1` → Cadastrar SSH
+  - `⌘2` → Cadastrar RDP
+  - `⌘3` → Cadastrar URL
+  - `Esc` → Cancelar
+
+---
+
+## 🗂 Persistência de dados (CSV)
+
+O app cria e mantém os arquivos em:
+
+```
+~/.config/MenuProUI/
+```
+
+Arquivos criados:
+
+- `clientes.csv`
+- `acessos.csv`
+- `rdpfiles/` (pasta para arquivos `.rdp` gerados)
+
+> Importante: o CSV é **simples** (split por vírgula). Evite vírgulas dentro dos campos.
+
+---
+
+## 📄 Formatos dos arquivos
+
+### 1) `clientes.csv`
+
+Header:
+```
+Id,Nome,Observacoes,CriadoEm,AtualizadoEm
+```
+
+Exemplo:
+```
+scma,Santa Casa,,2026-02-14 12:00:00,2026-02-14 12:00:00
+```
+
+---
+
+### 2) `acessos.csv`
+
+Header:
+```
+Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm
+```
+
+Exemplo SSH:
+```
+uuid-1,scma,SSH,scma-ssh01,10.0.0.10,2222,root,,,,,,, ,Acesso Linux,2026-02-14 12:00:00,2026-02-14 12:00:00
+```
+
+Exemplo URL:
+```
+uuid-2,scma,URL,fw-web01,firewall.voceconfia.com.br,4444,,,,,,,/,,2026-02-14 12:01:00,2026-02-14 12:01:00
+```
+
+---
+
+## 🔗 Como a ação “Abrir” funciona
+
+### SSH
+O app abre uma URL do tipo:
+
+```
+ssh://usuario@host:porta
+```
+
+O macOS encaminha para o handler padrão configurado (Terminal/iTerm/cliente SSH).  
+➡️ Isso evita permissões extras e automações.
+
+---
+
+### RDP
+O app gera um arquivo `.rdp` em:
+
+```
+~/.config/MenuProUI/rdpfiles/
+```
+
+E abre automaticamente com o app padrão de RDP do macOS (ex.: Microsoft Remote Desktop).
+
+Inclui a porta via:
+
+```
+server port:i:PORT
+```
+
+---
+
+### HTTPS
+O app abre no navegador padrão:
+
+```
+https://host:porta/path
+```
+
+---
+
+## 🎨 Ícone do app (AppIcon) — macOS
+
+O macOS exige múltiplos tamanhos no `AppIcon.appiconset`.
+
+Tamanhos comuns:
+
+- 16×16 (1x)
+- 32×32 (2x de 16)
+- 32×32 (1x)
+- 64×64 (2x de 32)
+- 128×128 (1x)
+- 256×256 (2x de 128)
+- 256×256 (1x)
+- 512×512 (2x de 256)
+- 512×512 (1x)
+- 1024×1024 (2x de 512)
+
+### Onde configurar
+No Xcode:
+- `Assets.xcassets` → `AppIcon`
+
+### Erro clássico
+Se aparecer algo como:
+
+> `logo.png is 1024x1024 but should be 16x16`
+
+Significa que um PNG grande foi colocado em slot pequeno.  
+Substitua pelo tamanho correto em cada slot.
+
+---
+
+## 📦 Build de distribuição (app/zip/dmg)
+
+Comandos base:
+
+```bash
+swift build -c release
+```
+
+O empacotamento pode gerar:
+
+- `dist/MenuProUI-MAC.app`
+- `dist/MenuProUI-MAC-app-macos-arm64-YYYY-MM-DD.zip`
+- `dist/MenuProUI-MAC-macos-arm64-YYYY-MM-DD.dmg`
+
+Assinatura local ad-hoc (opcional):
+
+```bash
+codesign --force --deep --sign - dist/MenuProUI-MAC.app
+```
+
+Validação:
+
+```bash
+codesign --verify --deep --strict --verbose=2 dist/MenuProUI-MAC.app
+```
+
+---
+
+## 🛠 Troubleshooting
+
+### 1) `Expressions are not allowed at the top level`
+Você tem Views/chamadas soltas fora de um `struct View`.
+
+✅ Correção:
+Garanta que `Image(...)`, `Text(...)`, `.frame(...)` etc. estejam dentro de:
+
+```swift
+struct ContentView: View {
+    var body: some View {
+        // Views aqui
+    }
+}
+```
+
+---
+
+### 2) `Result of call to 'frame(...)' is unused`
+Normalmente aparece quando `.frame(...)` está “solto”, não encadeado com uma View.
+
+✅ Exemplo correto:
+
+```swift
+Image("logo")
+  .resizable()
+  .frame(width: 40, height: 40)
+```
+
+---
+
+### 3) `Picker: the selection "" is invalid...`
+A seleção atual não corresponde a nenhum `.tag(...)` existente.
+
+✅ Correção recomendada:
+- Selecione clientes por **ID** (String) e use `.tag(...)` coerente com o tipo da seleção.
+
+---
+
+## 🧭 Estrutura do projeto (visão geral)
+
+Arquivos típicos:
+
+- `Views/ContentView.swift`  
+  UI principal: lista de clientes, busca e lista unificada de acessos.
+
+- `Models/Models.swift`  
+  Modelos: `Client`, `SSHServer`, `RDPServer`, `URLAccess`.
+
+- `Services/CSVStore.swift`  
+  Persistência: leitura, escrita e CRUD dos CSVs em `~/.config/MenuProUI/`.
+
+- `Services/SSHLauncher.swift`  
+  Abre SSH via `ssh://...` usando `NSWorkspace`.
+
+- `Services/RDPFileWriter.swift`  
+  Gera `.rdp` (com porta custom) e abre via `NSWorkspace`.
+
+- `Services/URLLauncher.swift`  
+  Abre URLs HTTPS via `NSWorkspace`.
+
+- `Dialogs/Add*.swift` / `Dialogs/Edit*.swift`  
+  Telas de cadastro e edição.
+
+---
+
+## 🔒 Segurança
+
+- O app **não armazena senhas**
+- Os dados ficam em `~/.config/MenuProUI/` no seu usuário do macOS
+- Recomenda-se proteger o dispositivo e o usuário com senha/Touch ID
+
+---
+
+## 🗺 Roadmap
+
+- Export/Import via UI
+- Busca em tempo real para clientes e acessos
+- Favoritos
+- Validação visual de host/porta/URL
+- Criptografia opcional do storage local
+- Sync opcional (ex.: iCloud Drive), se desejado
+
+---
+
+## 🤝 Contribuindo
+
+1. Faça um fork
+2. Crie uma branch:
+
+   ```bash
+   git checkout -b feature/minha-melhoria
+   ```
+
+3. Commit:
+
+   ```bash
+   git commit -m "feat: minha melhoria"
+   ```
+
+4. Push:
+
+   ```bash
+   git push origin feature/minha-melhoria
+   ```
+
+5. Abra um Pull Request
