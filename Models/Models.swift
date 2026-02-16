@@ -21,7 +21,7 @@ struct Client: Identifiable, Hashable, Sendable {
 // MARK: - SSH
 struct SSHServer: Identifiable, Hashable, Sendable {
     let id: String
-    let alias: String
+    var alias: String
     let clientId: String
     var name: String
     var host: String
@@ -49,7 +49,7 @@ struct SSHServer: Identifiable, Hashable, Sendable {
 // MARK: - RDP
 struct RDPServer: Identifiable, Hashable, Sendable {
     let id: String
-    let alias: String
+    var alias: String
     let clientId: String
     var name: String
     var host: String
@@ -89,7 +89,7 @@ struct RDPServer: Identifiable, Hashable, Sendable {
 // MARK: - URL Access
 struct URLAccess: Identifiable, Hashable, Sendable {
     let id: String
-    let alias: String
+    var alias: String
     let clientId: String
     var name: String
     var host: String

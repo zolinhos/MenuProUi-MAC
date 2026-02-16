@@ -22,7 +22,7 @@ struct EditRDPView: View {
             Text("Editar RDP").font(.title2).bold()
 
             Form {
-                Text("Alias: \(item.alias)").foregroundStyle(.secondary)
+                TextField("Alias", text: $item.alias)
                 Text("Cliente: \(item.clientId)").foregroundStyle(.secondary)
 
                 TextField("Nome", text: $item.name)
