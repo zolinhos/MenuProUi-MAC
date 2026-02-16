@@ -325,14 +325,14 @@ bash scripts/check_signing_setup.sh
 # 4) Gerar release notarizada
 export DEV_ID_APP_CERT="Developer ID Application: Seu Nome (TEAMID)"
 export NOTARY_PROFILE="notary-profile"
-bash scripts/release_notarized_macos.sh 1.7.1
+bash scripts/release_notarized_macos.sh 1.7.3
 ```
 
 Validação final:
 
 ```bash
 spctl --assess --type execute -vvv dist/MenuProUI-MAC.app
-spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.1.dmg
+spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.3.dmg
 ```
 
 > Observação: os artefatos atuais são `arm64` (Apple Silicon). Em Mac Intel, é necessário gerar build `x86_64` ou universal.
@@ -342,7 +342,7 @@ spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.1.dmg
 Se você não quer pagar o programa da Apple, pode distribuir com assinatura ad-hoc/local:
 
 ```bash
-bash scripts/release_untrusted_macos.sh 1.7.1
+bash scripts/release_untrusted_macos.sh 1.7.3
 ```
 
 Isso gera ZIP/DMG, mas no Mac de quem receber pode aparecer bloqueio na primeira abertura.

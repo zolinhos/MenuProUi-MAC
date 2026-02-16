@@ -314,7 +314,6 @@ struct ContentView: View {
                             connectivityIndicator(for: clientConnectivityState(clientId: client.id), size: 9)
                             Text(client.name).font(.headline)
                         }
-                        Text(client.id).font(.caption).foregroundStyle(.secondary)
                         if !client.tags.isEmpty {
                             Text(client.tags).font(.caption).foregroundStyle(.blue.opacity(0.9))
                         }
