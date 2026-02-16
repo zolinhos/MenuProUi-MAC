@@ -23,6 +23,7 @@ struct ContentView: View {
     @State private var showAddURL = false
     @State private var showAddAccessChooser = false
     @State private var showHelp = false
+    @State private var showConnectivityScopeChooser = false
 
     @State private var editingClient: Client?
     @State private var editingSSH: SSHServer?
@@ -143,6 +144,21 @@ struct ContentView: View {
                     .keyboardShortcut(.cancelAction)
             } message: {
                 Text("Escolha o tipo de acesso para o cliente selecionado.")
+            }
+            .confirmationDialog("Checar conectividade", isPresented: $showConnectivityScopeChooser) {
+                Button("Somente este cliente") {
+                    checkSelectedClientConnectivity()
+                }
+                .keyboardShortcut(.defaultAction)
+
+                Button("Todos os clientes") {
+                    checkAllClientsConnectivity()
+                }
+
+                Button("Cancelar", role: .cancel) {}
+                    .keyboardShortcut(.cancelAction)
+            } message: {
+                Text("Deseja checar conectividade apenas do cliente selecionado ou de todos os clientes?")
             }
             .sheet(isPresented: $showHelp) { helpSheet }
             .sheet(isPresented: $showAddClient) {
@@ -378,7 +394,7 @@ struct ContentView: View {
                             .keyboardShortcut(.defaultAction)
                             .disabled(selectedAccessRow == nil)
                         Button {
-                            checkSelectedClientConnectivity()
+                            showConnectivityScopeChooser = true
                         } label: {
                             Label(isCheckingConnectivity ? "Checando..." : "Checar Conectividade", systemImage: "wave.3.right")
                         }
@@ -683,6 +699,19 @@ struct ContentView: View {
 
     private func checkSelectedClientConnectivity() {
         let rows = allRowsForSelectedClient
+        guard !rows.isEmpty else { return }
+
+        performConnectivityCheck(rows: rows)
+    }
+
+    private func checkAllClientsConnectivity() {
+        let rows = store.clients.flatMap { allRows(for: $0.id) }
+        guard !rows.isEmpty else { return }
+
+        performConnectivityCheck(rows: rows)
+    }
+
+    private func performConnectivityCheck(rows: [AccessRow]) {
         guard !rows.isEmpty else { return }
 
         isCheckingConnectivity = true
