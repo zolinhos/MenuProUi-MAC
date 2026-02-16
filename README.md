@@ -21,22 +21,31 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
 - **SSH**
   - Cadastrar (alias, nome, host, **porta**, usuário, tags)
   - Abrir com 1 clique
-  - Editar e apagar
+  - Editar, clonar e apagar
 - **RDP**
   - Cadastrar (alias, nome, host, **porta**, domínio opcional, usuário, tags)
   - Abrir com 1 clique (gera `.rdp`)
-  - Editar e apagar
+  - Editar, clonar e apagar
   - Porta customizada gravada corretamente via `server port:i:PORT`
 - **HTTPS**
   - Cadastrar URL completa (ex.: `https://firewall.voceconfia.com.br:4444`)
   - Porta padrão **443** caso não seja informada
   - Abrir no navegador padrão
-  - Editar e apagar
+  - Editar, clonar e apagar
+
+### Saúde de conectividade (manual)
+- Botão **Checar Conectividade** por cliente (sem auto-refresh)
+- Status por acesso:
+  - 🟢 online
+  - 🔴 offline
+  - 🟡 checando
+  - ⚪ não checado
+- Indicador agregado no cliente (sidebar)
 
 ### Interface
 - Tema escuro (azul/preto)
 - Lista de clientes na lateral (NavigationSplitView)
-- Ações rápidas (Adicionar / Abrir / Editar / Apagar)
+- Ações rápidas (Adicionar / Abrir / Checar conectividade / Editar / Apagar)
 - (Opcional) gráficos/estatísticas se `LogParser` estiver ativo
 
 ---
@@ -184,17 +193,17 @@ scma,Santa Casa,,2026-02-14 12:00:00,2026-02-14 12:00:00
 
 Header:
 ```
-Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm
+Id,ClientId,Tipo,Apelido,Nome,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm
 ```
 
 Exemplo SSH:
 ```
-uuid-1,scma,SSH,scma-ssh01,10.0.0.10,2222,root,,,,,,, ,Acesso Linux,2026-02-14 12:00:00,2026-02-14 12:00:00
+uuid-1,scma,SSH,scma-ssh01,Servidor Linux 01,10.0.0.10,2222,root,,,,,,, ,Acesso Linux,2026-02-14 12:00:00,2026-02-14 12:00:00
 ```
 
 Exemplo URL:
 ```
-uuid-2,scma,URL,fw-web01,firewall.voceconfia.com.br,4444,,,,,,,/,,2026-02-14 12:01:00,2026-02-14 12:01:00
+uuid-2,scma,URL,fw-web01,Firewall Web,firewall.voceconfia.com.br,4444,,,,,,,/,,2026-02-14 12:01:00,2026-02-14 12:01:00
 ```
 
 ---
@@ -316,14 +325,14 @@ bash scripts/check_signing_setup.sh
 # 4) Gerar release notarizada
 export DEV_ID_APP_CERT="Developer ID Application: Seu Nome (TEAMID)"
 export NOTARY_PROFILE="notary-profile"
-bash scripts/release_notarized_macos.sh 1.7
+bash scripts/release_notarized_macos.sh 1.7.1
 ```
 
 Validação final:
 
 ```bash
 spctl --assess --type execute -vvv dist/MenuProUI-MAC.app
-spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.dmg
+spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.1.dmg
 ```
 
 > Observação: os artefatos atuais são `arm64` (Apple Silicon). Em Mac Intel, é necessário gerar build `x86_64` ou universal.
@@ -333,7 +342,7 @@ spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.dmg
 Se você não quer pagar o programa da Apple, pode distribuir com assinatura ad-hoc/local:
 
 ```bash
-bash scripts/release_untrusted_macos.sh 1.7
+bash scripts/release_untrusted_macos.sh 1.7.1
 ```
 
 Isso gera ZIP/DMG, mas no Mac de quem receber pode aparecer bloqueio na primeira abertura.
