@@ -25,7 +25,7 @@ final class CSVStore: ObservableObject {
         accessesURL = Self.dataDirectoryURL.appendingPathComponent("acessos.csv")
         try? FileManager.default.createDirectory(at: Self.dataDirectoryURL, withIntermediateDirectories: true)
         ensureFile(clientsURL, header: "Id,Nome,Observacoes,CriadoEm,AtualizadoEm")
-        ensureFile(accessesURL, header: "Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm")
+        ensureFile(accessesURL, header: "Id,ClientId,Tipo,Apelido,Nome,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm")
         migrateAccessesIfNeeded()
         reload()
     }
@@ -430,14 +430,14 @@ final class CSVStore: ObservableObject {
     }
 
     private func saveAccessRows(_ rows: [AccessRowStored]) throws {
-        let header = "Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm"
+        let header = "Id,ClientId,Tipo,Apelido,Nome,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm"
         let body = rows.map {
             let w = $0.rdpWidth.map(String.init) ?? ""
             let h = $0.rdpHeight.map(String.init) ?? ""
             let url = $0.kind == .url ? formatURL(host: $0.host, port: $0.port, path: $0.path) : ""
             let createdAt = $0.createdAt.isEmpty ? nowTimestamp() : $0.createdAt
             let updatedAt = nowTimestamp()
-            return "\(csv($0.id)),\(csv($0.clientId)),\($0.kind.rawValue),\(csv($0.alias)),\(csv($0.host)),\($0.port),\(csv($0.user)),\(csv($0.domain)),\($0.rdpIgnoreCert),\($0.rdpFullScreen),\($0.rdpDynamicResolution),\(w),\(h),\(csv(url)),\(csv($0.notes)),\(csv(createdAt)),\(csv(updatedAt))"
+            return "\(csv($0.id)),\(csv($0.clientId)),\($0.kind.rawValue),\(csv($0.alias)),\(csv($0.name)),\(csv($0.host)),\($0.port),\(csv($0.user)),\(csv($0.domain)),\($0.rdpIgnoreCert),\($0.rdpFullScreen),\($0.rdpDynamicResolution),\(w),\(h),\(csv(url)),\(csv($0.notes)),\(csv(createdAt)),\(csv(updatedAt))"
         }
         try writeFile(accessesURL, lines: [header] + body)
     }

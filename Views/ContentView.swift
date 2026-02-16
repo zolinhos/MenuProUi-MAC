@@ -413,6 +413,7 @@ struct ContentView: View {
                                 .tag(row.id)
                                 .contextMenu {
                                     Button("Abrir") { open(row: row) }
+                                    Button("Clonar") { clone(row: row) }
                                     Button("Editar") { edit(row: row) }
                                     Button("Excluir", role: .destructive) { delete(row: row) }
                                 }
@@ -507,6 +508,102 @@ struct ContentView: View {
         case .url:
             confirmDeleteURL = store.urls.first(where: { $0.id == row.id })
         }
+    }
+
+    private func clone(row: AccessRow) {
+        do {
+            switch row.kind {
+            case .ssh:
+                guard let access = store.ssh.first(where: { $0.id == row.id }) else { return }
+                let alias = makeCloneAlias(base: access.alias, kind: .ssh, clientId: access.clientId)
+                try store.addSSH(
+                    alias: alias,
+                    clientId: access.clientId,
+                    name: access.name,
+                    host: access.host,
+                    port: access.port,
+                    user: access.user,
+                    tags: access.tags,
+                    notes: access.notes
+                )
+                selectedAccessId = store.ssh.first(where: {
+                    $0.clientId.caseInsensitiveCompare(access.clientId) == .orderedSame &&
+                    $0.alias.caseInsensitiveCompare(alias) == .orderedSame
+                })?.id
+            case .rdp:
+                guard let access = store.rdp.first(where: { $0.id == row.id }) else { return }
+                let alias = makeCloneAlias(base: access.alias, kind: .rdp, clientId: access.clientId)
+                try store.addRDP(payload: .init(
+                    alias: alias,
+                    clientId: access.clientId,
+                    name: access.name,
+                    host: access.host,
+                    port: access.port,
+                    domain: access.domain,
+                    user: access.user,
+                    tags: access.tags,
+                    ignoreCert: access.ignoreCert,
+                    fullScreen: access.fullScreen,
+                    dynamicResolution: access.dynamicResolution,
+                    width: access.width,
+                    height: access.height,
+                    notes: access.notes
+                ))
+                selectedAccessId = store.rdp.first(where: {
+                    $0.clientId.caseInsensitiveCompare(access.clientId) == .orderedSame &&
+                    $0.alias.caseInsensitiveCompare(alias) == .orderedSame
+                })?.id
+            case .url:
+                guard let access = store.urls.first(where: { $0.id == row.id }) else { return }
+                let alias = makeCloneAlias(base: access.alias, kind: .url, clientId: access.clientId)
+                try store.addURL(.init(
+                    alias: alias,
+                    clientId: access.clientId,
+                    name: access.name,
+                    host: access.host,
+                    port: access.port,
+                    path: access.path,
+                    tags: access.tags,
+                    notes: access.notes
+                ))
+                selectedAccessId = store.urls.first(where: {
+                    $0.clientId.caseInsensitiveCompare(access.clientId) == .orderedSame &&
+                    $0.alias.caseInsensitiveCompare(alias) == .orderedSame
+                })?.id
+            }
+        } catch {
+            showErr(error)
+        }
+    }
+
+    private func makeCloneAlias(base: String, kind: AccessKind, clientId: String) -> String {
+        let normalizedClient = clientId.lowercased()
+        let used: Set<String>
+        switch kind {
+        case .ssh:
+            used = Set(store.ssh.filter { $0.clientId.lowercased() == normalizedClient }.map { $0.alias.lowercased() })
+        case .rdp:
+            used = Set(store.rdp.filter { $0.clientId.lowercased() == normalizedClient }.map { $0.alias.lowercased() })
+        case .url:
+            used = Set(store.urls.filter { $0.clientId.lowercased() == normalizedClient }.map { $0.alias.lowercased() })
+        }
+
+        let root = base.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = root.isEmpty ? "acesso" : root
+        let first = "\(fallback)-copia"
+        if !used.contains(first.lowercased()) {
+            return first
+        }
+
+        var index = 2
+        while index < 1000 {
+            let candidate = "\(fallback)-copia-\(index)"
+            if !used.contains(candidate.lowercased()) {
+                return candidate
+            }
+            index += 1
+        }
+        return "\(fallback)-copia-\(UUID().uuidString.prefix(6))"
     }
 
     private var chartCard: some View {
