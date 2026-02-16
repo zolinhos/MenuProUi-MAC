@@ -345,6 +345,30 @@ Se você não quer pagar o programa da Apple, pode distribuir com assinatura ad-
 bash scripts/release_untrusted_macos.sh 1.7.3
 ```
 
+### Publicar release em 1 comando (tag + GitHub + upload)
+
+Para facilitar próximas versões, use o orquestrador abaixo:
+
+```bash
+bash scripts/release_publish_untrusted.sh 1.7.4
+```
+
+Ele executa automaticamente:
+
+- build/empacotamento (`zip` e `dmg`)
+- criação da tag (`v<versão>`) se não existir
+- push da tag
+- criação/atualização da release no GitHub e upload dos assets
+
+Se precisar informar manualmente o repositório:
+
+```bash
+bash scripts/release_publish_untrusted.sh 1.7.4 zolinhos/MenuProUi-MAC
+```
+
+As notas da release são lidas de `dist/release_notes_v<versão>.md`.
+Se o arquivo não existir, o script cria um template automaticamente.
+
 Isso gera ZIP/DMG, mas no Mac de quem receber pode aparecer bloqueio na primeira abertura.
 
 No Mac de destino:
