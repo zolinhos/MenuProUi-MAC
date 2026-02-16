@@ -30,6 +30,29 @@ require_command codesign
 require_command ditto
 require_command hdiutil
 
+sync_app_from_build() {
+  local build_bin
+  local build_bundle
+
+  build_bin="$(find .build -type f -path "*/release/${APP_NAME}" | head -n 1)"
+  build_bundle="$(find .build -type d -path "*/release/${APP_NAME}_${APP_NAME}.bundle" | head -n 1)"
+
+  if [[ -z "$build_bin" || ! -f "$build_bin" ]]; then
+    echo "Binário release não encontrado em .build para ${APP_NAME}"
+    exit 1
+  fi
+
+  echo "==> Sincronizar binário compilado no app bundle"
+  cp -f "$build_bin" "$APP_PATH/Contents/MacOS/${APP_NAME}"
+  chmod +x "$APP_PATH/Contents/MacOS/${APP_NAME}"
+
+  if [[ -n "$build_bundle" && -d "$build_bundle" ]]; then
+    echo "==> Sincronizar resources bundle compilado"
+    rm -rf "$APP_PATH/Contents/Resources/${APP_NAME}_${APP_NAME}.bundle"
+    cp -R "$build_bundle" "$APP_PATH/Contents/Resources/"
+  fi
+}
+
 mkdir -p "$DIST_DIR"
 
 echo "==> Build release SwiftPM"
@@ -40,6 +63,8 @@ if [[ ! -d "$APP_PATH" ]]; then
   echo "Monte o bundle .app em dist antes de rodar este script."
   exit 1
 fi
+
+sync_app_from_build
 
 echo "==> Atualizar versão no Info.plist (${VERSION})"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP_PATH/Contents/Info.plist"
