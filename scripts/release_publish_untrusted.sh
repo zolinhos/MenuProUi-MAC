@@ -58,6 +58,7 @@ require_command bash
 
 VERSION="$(normalize_version "$VERSION_INPUT")"
 TAG="v${VERSION}"
+RELEASE_NAME="Versão ${APP_NAME} ${VERSION}"
 OWNER_REPO="$OWNER_REPO_INPUT"
 
 if [[ -z "$OWNER_REPO" ]]; then
@@ -88,7 +89,7 @@ fi
 
 if [[ ! -f "$NOTES_PATH" ]]; then
   cat > "$NOTES_PATH" <<EOF
-${APP_NAME} ${VERSION}
+${RELEASE_NAME}
 
 ## Novidades
 - Atualização ${TAG}
@@ -130,7 +131,7 @@ echo "==> [4/4] Criar/atualizar release e subir assets"
 python3 scripts/publish_github_release.py \
   "$OWNER_REPO" \
   "$TAG" \
-  --name "$TAG" \
+  --name "$RELEASE_NAME" \
   --body-file "$NOTES_PATH" \
   "$ZIP_PATH" \
   "$DMG_PATH"

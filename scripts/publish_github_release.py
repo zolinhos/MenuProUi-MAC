@@ -99,7 +99,8 @@ def main() -> int:
     owner_repo = args.owner_repo
     api = f"https://api.github.com/repos/{owner_repo}"
     upload_api = f"https://uploads.github.com/repos/{owner_repo}"
-    release_name = args.name or args.tag
+    version_label = args.tag[1:] if args.tag.startswith("v") else args.tag
+    release_name = args.name or f"Versão MenuProUI-MAC {version_label}"
 
     status, release = github_request(f"{api}/releases/tags/{args.tag}", auth)
     if status == 404:
