@@ -1,6 +1,13 @@
 import SwiftUI
 import Charts
 
+private enum ConnectivityState {
+    case unknown
+    case checking
+    case online
+    case offline
+}
+
 struct ContentView: View {
     @StateObject private var store = CSVStore()
     @StateObject private var logs = LogParser()
@@ -29,6 +36,9 @@ struct ContentView: View {
 
     @State private var showError = false
     @State private var errorMessage = ""
+    @State private var accessConnectivity: [String: ConnectivityState] = [:]
+    @State private var isCheckingConnectivity = false
+    @State private var lastConnectivityCheck: Date?
 
     var body: some View {
         dialogsLayer
@@ -51,7 +61,11 @@ struct ContentView: View {
 
     private var allRowsForSelectedClient: [AccessRow] {
         guard let selectedClientId else { return [] }
-        let client = selectedClientId.lowercased()
+        return allRows(for: selectedClientId)
+    }
+
+    private func allRows(for clientId: String) -> [AccessRow] {
+        let client = clientId.lowercased()
 
         let sshRows = store.ssh.filter { $0.clientId.lowercased() == client }.map {
             AccessRow(id: $0.id, kind: .ssh, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "")
@@ -296,7 +310,10 @@ struct ContentView: View {
             List(selection: $selectedClientId) {
                 ForEach(filteredClients) { client in
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(client.name).font(.headline)
+                        HStack(spacing: 6) {
+                            connectivityIndicator(for: clientConnectivityState(clientId: client.id), size: 9)
+                            Text(client.name).font(.headline)
+                        }
                         Text(client.id).font(.caption).foregroundStyle(.secondary)
                         if !client.tags.isEmpty {
                             Text(client.tags).font(.caption).foregroundStyle(.blue.opacity(0.9))
@@ -361,6 +378,13 @@ struct ContentView: View {
                             .buttonStyle(.borderedProminent)
                             .keyboardShortcut(.defaultAction)
                             .disabled(selectedAccessRow == nil)
+                        Button {
+                            checkSelectedClientConnectivity()
+                        } label: {
+                            Label(isCheckingConnectivity ? "Checando..." : "Checar Conectividade", systemImage: "wave.3.right")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isCheckingConnectivity || selectedClient == nil || allRowsForSelectedClient.isEmpty)
                         Button("Editar") { editSelectedAccess() }
                             .buttonStyle(.bordered)
                             .keyboardShortcut("e", modifiers: [.command])
@@ -370,6 +394,15 @@ struct ContentView: View {
                             .keyboardShortcut(.delete, modifiers: [])
                             .disabled(selectedAccessRow == nil)
                         Spacer()
+                    }
+
+                    if let lastConnectivityCheck {
+                        HStack {
+                            Text("Última checagem: \(lastConnectivityCheck.formatted(date: .abbreviated, time: .standard))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
                     }
 
                     accessHeader
@@ -399,6 +432,7 @@ struct ContentView: View {
 
     private var accessHeader: some View {
         HStack {
+            Text("Status").frame(width: 54, alignment: .leading)
             Text("Tipo").frame(width: 60, alignment: .leading)
             Text("Alias").frame(maxWidth: .infinity, alignment: .leading)
             Text("Host").frame(maxWidth: .infinity, alignment: .leading)
@@ -411,6 +445,8 @@ struct ContentView: View {
 
     private func accessRowView(_ row: AccessRow) -> some View {
         HStack {
+            connectivityIndicator(for: connectivityState(for: row.id), size: 10)
+                .frame(width: 54, alignment: .leading)
             Text(row.kind.rawValue).frame(width: 60, alignment: .leading)
             Text(row.alias).frame(maxWidth: .infinity, alignment: .leading)
             Text(row.host).frame(maxWidth: .infinity, alignment: .leading)
@@ -548,5 +584,67 @@ struct ContentView: View {
     private func showErrText(_ message: String) {
         errorMessage = message
         showError = true
+    }
+
+    private func checkSelectedClientConnectivity() {
+        let rows = allRowsForSelectedClient
+        guard !rows.isEmpty else { return }
+
+        isCheckingConnectivity = true
+        for row in rows {
+            accessConnectivity[row.id] = .checking
+        }
+
+        Task {
+            let results = await ConnectivityChecker.checkAll(rows: rows)
+            await MainActor.run {
+                for row in rows {
+                    accessConnectivity[row.id] = (results[row.id] == true) ? .online : .offline
+                }
+                lastConnectivityCheck = Date()
+                isCheckingConnectivity = false
+            }
+        }
+    }
+
+    private func connectivityState(for accessId: String) -> ConnectivityState {
+        accessConnectivity[accessId] ?? .unknown
+    }
+
+    private func clientConnectivityState(clientId: String) -> ConnectivityState {
+        let rows = allRows(for: clientId)
+        guard !rows.isEmpty else { return .unknown }
+        let states = rows.map { connectivityState(for: $0.id) }
+
+        if states.contains(.checking) {
+            return .checking
+        }
+        if states.allSatisfy({ $0 == .online }) {
+            return .online
+        }
+        if states.contains(.offline) {
+            return .offline
+        }
+        return .unknown
+    }
+
+    @ViewBuilder
+    private func connectivityIndicator(for state: ConnectivityState, size: CGFloat) -> some View {
+        Circle()
+            .fill(connectivityColor(for: state))
+            .frame(width: size, height: size)
+    }
+
+    private func connectivityColor(for state: ConnectivityState) -> Color {
+        switch state {
+        case .online:
+            return .green
+        case .offline:
+            return .red
+        case .checking:
+            return .yellow
+        case .unknown:
+            return .gray
+        }
     }
 }

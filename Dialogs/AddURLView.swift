@@ -32,7 +32,13 @@ struct AddURLView: View {
                 TextField("URL completa (ex: https://firewall...:4444)", text: $urlText)
 
                 TextField("Tags (opcional)", text: $tags)
-                TextField("Observações (opcional)", text: $notes)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Observações (opcional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 90)
+                }
 
                 Text("Se não informar porta, será usado 443 por padrão.")
                     .font(.caption)
@@ -61,6 +67,7 @@ struct AddURLView: View {
             }
         }
         .padding()
+        .frame(minWidth: 760, minHeight: 560)
         .preferredColorScheme(.dark)
         .onAppear {
             if clientId.isEmpty {

@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: - Cliente
-struct Client: Identifiable, Hashable {
+struct Client: Identifiable, Hashable, Sendable {
     let id: String
     var name: String
     var tags: String
@@ -19,7 +19,7 @@ struct Client: Identifiable, Hashable {
 }
 
 // MARK: - SSH
-struct SSHServer: Identifiable, Hashable {
+struct SSHServer: Identifiable, Hashable, Sendable {
     let id: String
     let alias: String
     let clientId: String
@@ -47,7 +47,7 @@ struct SSHServer: Identifiable, Hashable {
 }
 
 // MARK: - RDP
-struct RDPServer: Identifiable, Hashable {
+struct RDPServer: Identifiable, Hashable, Sendable {
     let id: String
     let alias: String
     let clientId: String
@@ -87,7 +87,7 @@ struct RDPServer: Identifiable, Hashable {
 }
 
 // MARK: - URL Access
-struct URLAccess: Identifiable, Hashable {
+struct URLAccess: Identifiable, Hashable, Sendable {
     let id: String
     let alias: String
     let clientId: String
@@ -115,26 +115,26 @@ struct URLAccess: Identifiable, Hashable {
 }
 
 // MARK: - Enum Tipos
-enum ConnType: String, Codable, CaseIterable {
+enum ConnType: String, Codable, CaseIterable, Sendable {
     case ssh = "SSH"
     case rdp = "RDP"
 }
 
-enum AccessKind: String, Codable, CaseIterable {
+enum AccessKind: String, Codable, CaseIterable, Sendable {
     case ssh = "SSH"
     case rdp = "RDP"
     case url = "URL"
 }
 
 // MARK: - Log e Row
-struct ConnLogPoint: Identifiable, Hashable {
+struct ConnLogPoint: Identifiable, Hashable, Sendable {
     let id: UUID = UUID()
     let day: Date
     let type: ConnType
     let count: Int
 }
 
-struct AccessRow: Identifiable {
+struct AccessRow: Identifiable, Sendable {
     let id: String
     let kind: AccessKind
     let alias: String

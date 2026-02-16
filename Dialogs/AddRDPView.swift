@@ -67,7 +67,13 @@ struct AddRDPView: View {
                     .disabled(dynamicResolution)
                 TextField("Altura (opcional)", text: $heightText)
                     .disabled(dynamicResolution)
-                TextField("Observações (opcional)", text: $notes)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Observações (opcional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 90)
+                }
 
                 Text("Obs: porta fora do padrão é gravada no .rdp via server port:i:PORT.")
                     .font(.caption)
@@ -102,6 +108,7 @@ struct AddRDPView: View {
             }
         }
         .padding()
+        .frame(minWidth: 760, minHeight: 620)
         .preferredColorScheme(.dark)
         .onAppear {
             if clientId.isEmpty {

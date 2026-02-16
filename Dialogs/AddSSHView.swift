@@ -47,7 +47,13 @@ struct AddSSHView: View {
 
                 TextField("Usuário", text: $user)
                 TextField("Tags (opcional)", text: $tags)
-                TextField("Observações (opcional)", text: $notes)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Observações (opcional)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $notes)
+                        .frame(minHeight: 90)
+                }
             }
 
             HStack {
@@ -72,6 +78,7 @@ struct AddSSHView: View {
             }
         }
         .padding()
+        .frame(minWidth: 760, minHeight: 560)
         .preferredColorScheme(.dark)
         .onAppear {
             if clientId.isEmpty {

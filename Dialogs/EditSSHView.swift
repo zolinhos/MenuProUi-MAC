@@ -26,7 +26,13 @@ struct EditSSHView: View {
                 TextField("Porta", text: $portText)
                 TextField("Usuário", text: $item.user)
                 TextField("Tags", text: $item.tags)
-                TextField("Observações", text: $item.notes)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Observações")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $item.notes)
+                        .frame(minHeight: 90)
+                }
             }
 
             HStack {
@@ -41,6 +47,7 @@ struct EditSSHView: View {
             }
         }
         .padding()
+        .frame(minWidth: 760, minHeight: 520)
         .preferredColorScheme(.dark)
     }
 }
