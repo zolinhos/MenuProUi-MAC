@@ -416,7 +416,10 @@ struct ContentView: View {
                                     Button("Editar") { edit(row: row) }
                                     Button("Excluir", role: .destructive) { delete(row: row) }
                                 }
-                                .onTapGesture(count: 2) { open(row: row) }
+                                .simultaneousGesture(
+                                    TapGesture(count: 2)
+                                        .onEnded { open(row: row) }
+                                )
                         }
                     }
                 }
@@ -456,6 +459,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 3)
+        .contentShape(Rectangle())
     }
 
     private func openSelectedAccess() {
