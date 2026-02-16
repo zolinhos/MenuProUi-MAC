@@ -21,7 +21,10 @@ let package = Package(
                 "RELEASE_CHECKLIST.md",
                 "MenuProUi-Bridging-Header.h",
                 "main.swift",
-                "dist"
+                "dist",
+                "scripts",
+                ".env.release",
+                ".env.release.example"
             ],
             resources: [
                 .process("Assets.xcassets")

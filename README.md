@@ -254,6 +254,53 @@ Validação:
 codesign --verify --deep --strict --verbose=2 dist/MenuProUI-MAC.app
 ```
 
+### Distribuição recomendada (Developer ID + Notarização)
+
+Para enviar para outros Macs sem bloqueio do Gatekeeper:
+
+```bash
+cp .env.release.example .env.release
+chmod +x scripts/*.sh
+
+# 1) Importar certificado Developer ID Application (.p12)
+bash scripts/import_developer_id_cert.sh ~/Downloads/developer_id_application.p12 "SENHA_DO_P12"
+
+# 2) Criar profile do notarytool
+bash scripts/setup_notary_profile.sh notary-profile
+
+# 3) Validar assinador/notary antes da release
+bash scripts/check_signing_setup.sh
+
+# 4) Gerar release notarizada
+export DEV_ID_APP_CERT="Developer ID Application: Seu Nome (TEAMID)"
+export NOTARY_PROFILE="notary-profile"
+bash scripts/release_notarized_macos.sh 1.5
+```
+
+Validação final:
+
+```bash
+spctl --assess --type execute -vvv dist/MenuProUI-MAC.app
+spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.5.dmg
+```
+
+> Observação: os artefatos atuais são `arm64` (Apple Silicon). Em Mac Intel, é necessário gerar build `x86_64` ou universal.
+
+### Distribuição sem pagar Apple Developer (não notarizado)
+
+Se você não quer pagar o programa da Apple, pode distribuir com assinatura ad-hoc/local:
+
+```bash
+bash scripts/release_untrusted_macos.sh 1.5
+```
+
+Isso gera ZIP/DMG, mas no Mac de quem receber pode aparecer bloqueio na primeira abertura.
+
+No Mac de destino:
+
+- Clique direito no app → Open
+- Ou: Privacy & Security → Open Anyway
+
 ---
 
 ## 🛠 Troubleshooting

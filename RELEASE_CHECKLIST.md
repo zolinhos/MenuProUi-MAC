@@ -1,4 +1,4 @@
-# Release Checklist — MenuProUI-MAC v1.3
+# Release Checklist — MenuProUI-MAC 1.5
 
 ## 1) Validação local
 - [ ] Rodar app e testar atalhos principais (`Enter`, `⌘N`, `⇧⌘N`, `⌘R`, `⌘E`, `⌫`, `⌘/`)
@@ -8,15 +8,24 @@
 ## 2) Build e artefatos
 - [x] Build release: `swift build -c release`
 - [x] App gerado: `dist/MenuProUI-MAC.app`
-- [x] Zip gerado: `dist/MenuProUI-MAC-app-macos-arm64-v1.3.zip`
-- [x] Dmg gerado: `dist/MenuProUI-MAC-macos-arm64-v1.3.dmg`
+- [ ] Zip gerado: `dist/MenuProUI-MAC-app-macos-arm64-1.5.zip`
+- [ ] Dmg gerado: `dist/MenuProUI-MAC-macos-arm64-1.5.dmg`
 
-## 3) Assinatura
-- [x] Assinar ad-hoc: `codesign --force --deep --sign - dist/MenuProUI-MAC.app`
-- [x] Verificar assinatura: `codesign --verify --deep --strict --verbose=2 dist/MenuProUI-MAC.app`
+## 3) Assinatura e notarização (distribuição)
+- [ ] Copiar ambiente: `cp .env.release.example .env.release`
+- [ ] Criar profile notary: `bash scripts/setup_notary_profile.sh notary-profile`
+- [ ] Definir certificado: `DEV_ID_APP_CERT="Developer ID Application: Seu Nome (TEAMID)"`
+- [ ] Definir autenticação notarização (`NOTARY_PROFILE` ou `AC_USERNAME` + `AC_PASSWORD` + `AC_TEAM_ID`)
+- [ ] Rodar script: `bash scripts/release_notarized_macos.sh 1.5`
+- [ ] Validar Gatekeeper app: `spctl --assess --type execute -vvv dist/MenuProUI-MAC.app`
+- [ ] Validar Gatekeeper dmg: `spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.5.dmg`
 
 ## 4) Publicação no GitHub
-- [ ] Criar tag `v1.3`
-- [ ] Criar release "MenuProUI-MAC v1.3"
+- [ ] Criar tag `v1.5`
+- [ ] Criar release "MenuProUI-MAC 1.5"
 - [ ] Anexar `.zip` e `.dmg`
 - [ ] Incluir changelog curto (atalhos, help, melhorias de empacotamento)
+
+## 5) Alternativa sem Apple Developer (sem notarização)
+- [ ] Rodar: `bash scripts/release_untrusted_macos.sh 1.5`
+- [ ] Avisar usuários: primeira abertura precisa de `Open Anyway` ou clique direito `Open`
