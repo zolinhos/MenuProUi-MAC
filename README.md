@@ -354,6 +354,14 @@ Para facilitar próximas versões, use o orquestrador abaixo:
 bash scripts/release_publish_untrusted.sh 1.7.4
 ```
 
+Antes de empacotar/publicar, o script executa automaticamente um **preflight checklist**:
+
+- valida comandos obrigatórios
+- valida arquivos essenciais
+- valida presença do atalho `⇧⌘K` no código e no README
+- valida presença do fluxo de escopo de conectividade
+- roda build release de validação
+
 Ele executa automaticamente:
 
 - build/empacotamento (`zip` e `dmg`)

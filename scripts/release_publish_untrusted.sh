@@ -77,6 +77,9 @@ NOTES_PATH="${DIST_DIR}/release_notes_${TAG}.md"
 
 mkdir -p "$DIST_DIR"
 
+echo "==> Preflight checklist automático"
+bash scripts/release_preflight.sh "$VERSION"
+
 echo "==> [1/4] Gerar artefatos ${VERSION}"
 bash scripts/release_untrusted_macos.sh "$VERSION"
 

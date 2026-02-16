@@ -1,4 +1,7 @@
-# Release Checklist — MenuProUI-MAC 1.7.3
+# Release Checklist — MenuProUI-MAC
+
+> Este checklist agora é validado automaticamente por `scripts/release_preflight.sh`
+> e é executado antes do publish em `scripts/release_publish_untrusted.sh`.
 
 ## 1) Validação local
 - [ ] Rodar app e testar atalhos principais (`Enter`, `⌘N`, `⇧⌘N`, `⌘R`, `⌘E`, `⌫`, `⌘/`)
