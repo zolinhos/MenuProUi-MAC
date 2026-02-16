@@ -143,6 +143,7 @@ Atalhos úteis implementados na interface:
 - `⌘R` → Atualizar dados
 - `⌘N` → Novo Cliente
 - `⇧⌘N` → Novo Acesso
+- `⇧⌘K` → Checar conectividade
 - `↩︎` → Abrir acesso selecionado
 - `⌘E` → Editar acesso selecionado
 - `⌫` → Excluir acesso selecionado

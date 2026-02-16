@@ -399,6 +399,7 @@ struct ContentView: View {
                             Label(isCheckingConnectivity ? "Checando..." : "Checar Conectividade", systemImage: "wave.3.right")
                         }
                         .buttonStyle(.bordered)
+                        .keyboardShortcut("k", modifiers: [.command, .shift])
                         .disabled(isCheckingConnectivity || selectedClient == nil || allRowsForSelectedClient.isEmpty)
                         Button("Editar") { editSelectedAccess() }
                             .buttonStyle(.bordered)
@@ -652,6 +653,7 @@ struct ContentView: View {
                         Text("⌘R  — Atualizar dados")
                         Text("⌘N  — Novo Cliente")
                         Text("⇧⌘N — Novo Acesso")
+                        Text("⇧⌘K — Checar conectividade")
                         Text("↩︎   — Abrir acesso selecionado")
                         Text("⌘E  — Editar acesso selecionado")
                         Text("⌫   — Excluir acesso selecionado")
