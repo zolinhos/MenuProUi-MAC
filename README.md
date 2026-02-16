@@ -52,9 +52,33 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
 
 ## ✅ Requisitos
 
-- macOS (Apple Silicon / Intel)
+- macOS 13+
 - Xcode 15+ (recomendado)
-- Swift 5.9+ (recomendado)
+- Swift 6.0+ (compatível com `swift-tools-version: 6.0`)
+- Command Line Tools do Xcode instalados
+
+### Verificação rápida do ambiente
+
+```bash
+sw_vers
+xcodebuild -version
+swift --version
+xcode-select -p
+```
+
+Se `xcode-select -p` falhar, rode:
+
+```bash
+xcode-select --install
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+sudo xcodebuild -license accept
+```
+
+### Dependências de execução (após compilar)
+
+- SSH: app handler configurado no macOS (`ssh://`)
+- RDP: cliente RDP instalado (ex.: Microsoft Remote Desktop)
+- HTTPS: navegador padrão
 
 ---
 
@@ -67,21 +91,39 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
    cd <PASTA_DO_REPO>
    ```
 
-2. Build via SwiftPM:
+2. (Opcional) Limpe build anterior:
+
+  ```bash
+  rm -rf .build
+  ```
+
+3. Build via SwiftPM:
 
   ```bash
   swift build
   ```
 
-3. Rodar local:
+4. Rodar local:
 
   ```bash
   swift run
   ```
 
-4. Opcional (Xcode):
+5. Opcional (Xcode):
   - `File` → `Open...` e abra a pasta do projeto
   - Execute com `Run` (⌘R)
+
+### Build release local (sem empacotar)
+
+```bash
+swift build -c release
+```
+
+### Erros comuns ao compilar local
+
+- `toolchain is invalid` / `missing SDK`: selecione o Xcode correto com `xcode-select -s`
+- `permission denied` em scripts: rode `chmod +x scripts/*.sh`
+- erro de assinatura ao distribuir: use o fluxo `scripts/release_untrusted_macos.sh` (sem notarização) ou configure Developer ID/notary
 
 ---
 
