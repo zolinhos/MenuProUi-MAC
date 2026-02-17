@@ -117,6 +117,8 @@ struct ContentView: View {
 
     @State private var connectivityCache: [String: ConnectivitySnapshot] = [:]
     @State private var f1KeyMonitor: Any?
+    /// Monitor de duplo clique para abrir acesso selecionado (via NSEvent, sem interferir na seleção do List).
+    @State private var doubleClickMonitor: Any?
     @FocusState private var focusedSearchField: SearchField?
 
     var body: some View {
@@ -296,6 +298,7 @@ struct ContentView: View {
             if selectedClientId == nil { selectedClientId = store.clients.first?.id }
             if selectedAccessId == nil { selectedAccessId = filteredRows.first?.id }
             installF1KeyMonitorIfNeeded()
+            installDoubleClickMonitorIfNeeded()
         }
         .onChange(of: selectedClientId) { _ in
             selectedAccessId = filteredRows.first?.id
@@ -311,6 +314,7 @@ struct ContentView: View {
         }
         .onDisappear {
             removeF1KeyMonitor()
+            removeDoubleClickMonitor()
         }
     }
 
@@ -784,13 +788,6 @@ struct ContentView: View {
                         ForEach(filteredRows) { row in
                             accessRowView(row)
                                 .tag(row.id)
-                                .contentShape(Rectangle())
-                                // Duplo clique abre o acesso; usa simultaneousGesture
-                                // para não bloquear a seleção nativa do List.
-                                .simultaneousGesture(
-                                    TapGesture(count: 2)
-                                        .onEnded { open(row: row) }
-                                )
                                 .contextMenu {
                                     Button("Novo Acesso") {
                                         guard selectedClient != nil else {
@@ -1447,6 +1444,24 @@ struct ContentView: View {
         guard let f1KeyMonitor else { return }
         NSEvent.removeMonitor(f1KeyMonitor)
         self.f1KeyMonitor = nil
+    }
+
+    /// Instala monitor de duplo clique no nível AppKit.
+    /// Diferente de SwiftUI gestures, não interfere na seleção nativa do List.
+    private func installDoubleClickMonitorIfNeeded() {
+        guard doubleClickMonitor == nil else { return }
+        doubleClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { [self] event in
+            if event.clickCount >= 2 {
+                openSelectedAccess()
+            }
+            return event
+        }
+    }
+
+    private func removeDoubleClickMonitor() {
+        guard let doubleClickMonitor else { return }
+        NSEvent.removeMonitor(doubleClickMonitor)
+        self.doubleClickMonitor = nil
     }
 
     private struct AuditEvent {
