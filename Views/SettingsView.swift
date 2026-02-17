@@ -14,6 +14,10 @@ struct SettingsView: View {
     @AppStorage("connectivity.autoCheckDebounceMs") private var autoCheckDebounceMs: Int = 800
     @AppStorage("export.formulaProtection") private var exportFormulaProtection = false
 
+    @State private var nmapRefreshToken = UUID()
+    @State private var nmapTestRunning = false
+    @State private var nmapTestResult: ConnectivityChecker.NmapTestResult?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -70,7 +74,36 @@ struct SettingsView: View {
                         Text("Detectado: \(ConnectivityChecker.nmapPathDescription)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+
+                        HStack(spacing: 10) {
+                            Button("Revalidar nmap") {
+                                nmapRefreshToken = UUID()
+                            }
+                            .buttonStyle(.bordered)
+
+                            Button(nmapTestRunning ? "Testando..." : "Testar nmap agora") {
+                                guard !nmapTestRunning else { return }
+                                nmapTestRunning = true
+                                nmapTestResult = nil
+                                Task(priority: .utility) {
+                                    let result = await ConnectivityChecker.testNmapNow(timeoutSeconds: 2.0)
+                                    await MainActor.run {
+                                        nmapTestResult = result
+                                        nmapTestRunning = false
+                                    }
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(nmapTestRunning)
+                        }
+
+                        if let nmapTestResult {
+                            Text(nmapTestResult.message)
+                                .font(.caption)
+                                .foregroundStyle(nmapTestResult.ok ? .green : .red)
+                        }
                     }
+                    .id(nmapRefreshToken)
                 }
 
                 Section("Exportação") {

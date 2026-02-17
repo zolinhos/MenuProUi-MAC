@@ -2,6 +2,28 @@ import Foundation
 @preconcurrency import Network
 
 enum ConnectivityChecker {
+    private final class NmapTestState: @unchecked Sendable {
+        let lock = NSLock()
+        var finished = false
+        var continuation: CheckedContinuation<NmapTestResult, Never>?
+        let process: Process
+        let pipe: Pipe
+
+        init(continuation: CheckedContinuation<NmapTestResult, Never>, process: Process, pipe: Pipe) {
+            self.continuation = continuation
+            self.process = process
+            self.pipe = pipe
+        }
+
+        func finish(_ result: NmapTestResult) {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !finished else { return }
+            finished = true
+            continuation?.resume(returning: result)
+            continuation = nil
+        }
+    }
     private final class ProbeState: @unchecked Sendable {
         let lock = NSLock()
         var finished = false
@@ -34,6 +56,59 @@ enum ConnectivityChecker {
 
     static var nmapPathDescription: String {
         resolveNmapPath() ?? "não encontrado"
+    }
+
+    struct NmapTestResult: Sendable {
+        let ok: Bool
+        let message: String
+    }
+
+    static func testNmapNow(timeoutSeconds: TimeInterval = 2.0) async -> NmapTestResult {
+        guard let nmapPath = resolveNmapPath() else {
+            return .init(ok: false, message: "nmap não encontrado")
+        }
+
+        return await withCheckedContinuation { continuation in
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: nmapPath)
+            process.arguments = ["--version"]
+
+            let pipe = Pipe()
+            process.standardOutput = pipe
+            process.standardError = pipe
+
+            let state = NmapTestState(continuation: continuation, process: process, pipe: pipe)
+            let finish: @Sendable (NmapTestResult) -> Void = { result in
+                state.finish(result)
+            }
+
+            process.terminationHandler = { _ in
+                let data = state.pipe.fileHandleForReading.readDataToEndOfFile()
+                let text = String(data: data, encoding: .utf8) ?? ""
+                let firstLine = text.split(whereSeparator: \ .isNewline).map(String.init).first ?? ""
+                if state.process.terminationStatus == 0 {
+                    let ok = text.lowercased().contains("nmap") && text.lowercased().contains("version")
+                    finish(.init(ok: ok, message: ok ? (firstLine.isEmpty ? "nmap OK" : firstLine) : (firstLine.isEmpty ? "nmap respondeu, mas saída inesperada" : firstLine)))
+                } else {
+                    finish(.init(ok: false, message: firstLine.isEmpty ? "nmap falhou (exit=\(state.process.terminationStatus))" : firstLine))
+                }
+            }
+
+            do {
+                try process.run()
+            } catch {
+                finish(.init(ok: false, message: "Falha ao executar nmap: \(error.localizedDescription)"))
+                return
+            }
+
+            let timeoutMs = max(0.1, min(timeoutSeconds, 30.0))
+            DispatchQueue.global().asyncAfter(deadline: .now() + timeoutMs) {
+                if state.process.isRunning {
+                    state.process.terminate()
+                    finish(.init(ok: false, message: "nmap timeout após \(Int(timeoutMs * 1000))ms"))
+                }
+            }
+        }
     }
 
     static func checkAll(

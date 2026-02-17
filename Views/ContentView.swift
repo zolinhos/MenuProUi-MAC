@@ -83,6 +83,11 @@ struct ContentView: View {
     @State private var connectivityProgressDone = 0
     @State private var scanBannerMessage = ""
     @State private var showScanBanner = false
+
+    @State private var scanStartedAt: Date?
+    @State private var scanEndedAt: Date?
+    @State private var scanDurationSeconds: TimeInterval?
+    @State private var lastConnectivityButtonTapAt: Date?
     private struct ConnectivitySnapshot {
         let isOnline: Bool
         let checkedAt: Date
@@ -634,6 +639,12 @@ struct ContentView: View {
                             .keyboardShortcut(.defaultAction)
                             .disabled(selectedAccessRow == nil)
                         Button {
+                            // Debounce to avoid opening the scope chooser multiple times on double clicks / key repeat.
+                            let now = Date()
+                            if let last = lastConnectivityButtonTapAt, now.timeIntervalSince(last) < 0.6 {
+                                return
+                            }
+                            lastConnectivityButtonTapAt = now
                             showConnectivityScopeChooser = true
                         } label: {
                             Label(isCheckingConnectivity ? "Checando..." : "Checar Conectividade", systemImage: "wave.3.right")
@@ -688,7 +699,36 @@ struct ContentView: View {
                         HStack(spacing: 10) {
                             ProgressView(value: Double(connectivityProgressDone), total: Double(max(connectivityProgressTotal, 1)))
                                 .frame(maxWidth: 260)
-                            Text("\(connectivityProgressDone)/\(connectivityProgressTotal)")
+                            let total = max(connectivityProgressTotal, 1)
+                            let done = max(0, min(connectivityProgressDone, total))
+                            let percent = Int((Double(done) / Double(total)) * 100.0)
+
+                            Text("\(done)/\(connectivityProgressTotal) — \(percent)%")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            if let scanStartedAt, done > 0 {
+                                let elapsed = Date().timeIntervalSince(scanStartedAt)
+                                let perItem = elapsed / Double(done)
+                                let remaining = max(0, perItem * Double(total - done))
+                                Text("ETA ~ \(formatDuration(seconds: remaining))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                        }
+
+                        if let scanStartedAt {
+                            HStack {
+                                Text("Início: \(scanStartedAt.formatted(date: .omitted, time: .standard))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                            }
+                        }
+                    } else if let scanStartedAt, let scanEndedAt, let scanDurationSeconds {
+                        HStack {
+                            Text("Última varredura: início \(scanStartedAt.formatted(date: .omitted, time: .standard)) — fim \(scanEndedAt.formatted(date: .omitted, time: .standard)) — duração \(formatDuration(seconds: scanDurationSeconds))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -1580,6 +1620,9 @@ struct ContentView: View {
         guard !rows.isEmpty else { return }
 
         isCheckingConnectivity = true
+        scanStartedAt = Date()
+        scanEndedAt = nil
+        scanDurationSeconds = nil
         lastConnectivityRows = rows
         connectivityProgressTotal = rows.count
         connectivityProgressDone = 0
@@ -1695,6 +1738,10 @@ struct ContentView: View {
             if Task.isCancelled {
                 await MainActor.run {
                     isCheckingConnectivity = false
+                    scanEndedAt = Date()
+                    if let started = scanStartedAt, let ended = scanEndedAt {
+                        scanDurationSeconds = max(0, ended.timeIntervalSince(started))
+                    }
                     scanBannerMessage = "Varredura cancelada (\(scopeName))."
                     showScanBanner = true
                 }
@@ -1717,6 +1764,10 @@ struct ContentView: View {
                 }
                 lastConnectivityCheck = Date()
                 isCheckingConnectivity = false
+                scanEndedAt = Date()
+                if let started = scanStartedAt, let ended = scanEndedAt {
+                    scanDurationSeconds = max(0, ended.timeIntervalSince(started))
+                }
                 let onlineCount = rows.filter { connectivityState(for: $0.id) == .online }.count
                 let offlineCount = rows.count - onlineCount
                 scanBannerMessage = "Concluído (\(scopeName)): \(onlineCount) online, \(offlineCount) offline."
@@ -1735,12 +1786,26 @@ struct ContentView: View {
         guard isCheckingConnectivity else { return }
         connectivityTask?.cancel()
         isCheckingConnectivity = false
+        scanEndedAt = Date()
+        if let started = scanStartedAt, let ended = scanEndedAt {
+            scanDurationSeconds = max(0, ended.timeIntervalSince(started))
+        }
         for row in lastConnectivityRows where accessConnectivity[row.id] == .checking {
             accessConnectivity[row.id] = .unknown
         }
         scanBannerMessage = "Varredura cancelada pelo usuário."
         showScanBanner = true
         store.logUIAction(action: "check_connectivity_cancelled", entityName: "Conectividade", details: "Varredura cancelada manualmente")
+    }
+
+    private func formatDuration(seconds: TimeInterval) -> String {
+        let totalSeconds = max(0, Int(seconds.rounded()))
+        let m = totalSeconds / 60
+        let s = totalSeconds % 60
+        if m > 99 {
+            return "99:59+"
+        }
+        return String(format: "%02d:%02d", m, s)
     }
 
     private var scanStatusBanner: some View {
