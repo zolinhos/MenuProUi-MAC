@@ -1,5 +1,6 @@
 import SwiftUI
-import Charts
+import AppKit
+import UniformTypeIdentifiers
 
 private enum ConnectivityState {
     case unknown
@@ -8,12 +9,19 @@ private enum ConnectivityState {
     case offline
 }
 
+private enum SearchField: Hashable {
+    case global
+    case clients
+    case accesses
+}
+
 struct ContentView: View {
     @StateObject private var store = CSVStore()
     @StateObject private var logs = LogParser()
 
     @State private var selectedClientId: String?
     @State private var selectedAccessId: String?
+    @State private var globalSearchText = ""
     @State private var clientsSearchText = ""
     @State private var accessesSearchText = ""
 
@@ -23,7 +31,9 @@ struct ContentView: View {
     @State private var showAddURL = false
     @State private var showAddAccessChooser = false
     @State private var showHelp = false
+    @State private var showAuditLog = false
     @State private var showConnectivityScopeChooser = false
+    @State private var auditLogText = ""
 
     @State private var editingClient: Client?
     @State private var editingSSH: SSHServer?
@@ -36,13 +46,17 @@ struct ContentView: View {
     @State private var confirmDeleteURL: URLAccess?
 
     @State private var showError = false
+    @State private var alertTitle = "Erro"
     @State private var errorMessage = ""
     @State private var accessConnectivity: [String: ConnectivityState] = [:]
     @State private var isCheckingConnectivity = false
     @State private var lastConnectivityCheck: Date?
+    @State private var f1KeyMonitor: Any?
+    @FocusState private var focusedSearchField: SearchField?
 
     var body: some View {
         dialogsLayer
+            .overlay(shortcutActionsView.hidden())
     }
 
     private var selectedClient: Client? {
@@ -51,12 +65,13 @@ struct ContentView: View {
     }
 
     private var filteredClients: [Client] {
-        let term = clientsSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !term.isEmpty else { return store.clients }
-        return store.clients.filter {
-            $0.id.lowercased().contains(term) ||
-            $0.name.lowercased().contains(term) ||
-            $0.tags.lowercased().contains(term)
+        let localTerm = clientsSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let globalTerm = globalSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        return store.clients.filter { client in
+            let matchesLocal = localTerm.isEmpty || clientMatches(client, term: localTerm)
+            let matchesGlobal = globalTerm.isEmpty || clientMatches(client, term: globalTerm) || allRows(for: client.id).contains(where: { rowMatches($0, term: globalTerm) })
+            return matchesLocal && matchesGlobal
         }
     }
 
@@ -65,19 +80,34 @@ struct ContentView: View {
         return allRows(for: selectedClientId)
     }
 
+    private var isGlobalSearchActive: Bool {
+        !globalSearchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private func allRows(for clientId: String) -> [AccessRow] {
         let client = clientId.lowercased()
+        let clientName = store.clients.first(where: { $0.id.lowercased() == client })?.name ?? clientId
 
         let sshRows = store.ssh.filter { $0.clientId.lowercased() == client }.map {
-            AccessRow(id: $0.id, kind: .ssh, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "")
+            AccessRow(id: $0.id, clientName: clientName, kind: .ssh, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
         }
         let rdpRows = store.rdp.filter { $0.clientId.lowercased() == client }.map {
-            AccessRow(id: $0.id, kind: .rdp, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "")
+            AccessRow(id: $0.id, clientName: clientName, kind: .rdp, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
         }
         let urlRows = store.urls.filter { $0.clientId.lowercased() == client }.map {
-            AccessRow(id: $0.id, kind: .url, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: "", url: "https://\($0.host):\($0.port)\($0.path)")
+            AccessRow(id: $0.id, clientName: clientName, kind: .url, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: "", url: "\($0.scheme)://\($0.host):\($0.port)\($0.path)", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
         }
-        return (sshRows + rdpRows + urlRows).sorted { lhs, rhs in
+        return sortRows(sshRows + rdpRows + urlRows)
+    }
+
+    private func sortRows(_ rows: [AccessRow]) -> [AccessRow] {
+        rows.sorted { lhs, rhs in
+            if lhs.isFavorite != rhs.isFavorite {
+                return lhs.isFavorite && !rhs.isFavorite
+            }
+            if lhs.clientName != rhs.clientName {
+                return lhs.clientName.localizedCaseInsensitiveCompare(rhs.clientName) == .orderedAscending
+            }
             if lhs.kind.rawValue == rhs.kind.rawValue {
                 return lhs.alias.localizedCaseInsensitiveCompare(rhs.alias) == .orderedAscending
             }
@@ -86,15 +116,40 @@ struct ContentView: View {
     }
 
     private var filteredRows: [AccessRow] {
-        let term = accessesSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !term.isEmpty else { return allRowsForSelectedClient }
-        return allRowsForSelectedClient.filter {
-            $0.alias.lowercased().contains(term) ||
-            $0.name.lowercased().contains(term) ||
-            $0.host.lowercased().contains(term) ||
-            $0.user.lowercased().contains(term) ||
-            $0.url.lowercased().contains(term)
+        let localTerm = accessesSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let globalTerm = globalSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+
+        let sourceRows: [AccessRow]
+        if isGlobalSearchActive {
+            sourceRows = store.clients.flatMap { allRows(for: $0.id) }
+        } else {
+            sourceRows = allRowsForSelectedClient
         }
+
+        return sortRows(sourceRows.filter { row in
+            let matchesLocal = localTerm.isEmpty || rowMatches(row, term: localTerm)
+            let matchesGlobal = globalTerm.isEmpty || rowMatches(row, term: globalTerm)
+            return matchesLocal && matchesGlobal
+        })
+    }
+
+    private func clientMatches(_ client: Client, term: String) -> Bool {
+        client.id.lowercased().contains(term) ||
+        client.name.lowercased().contains(term) ||
+        client.tags.lowercased().contains(term) ||
+        client.notes.lowercased().contains(term)
+    }
+
+    private func rowMatches(_ row: AccessRow, term: String) -> Bool {
+        row.clientName.lowercased().contains(term) ||
+        row.alias.lowercased().contains(term) ||
+        row.name.lowercased().contains(term) ||
+        row.host.lowercased().contains(term) ||
+        row.user.lowercased().contains(term) ||
+        row.url.lowercased().contains(term) ||
+        row.port.lowercased().contains(term) ||
+        row.tags.lowercased().contains(term) ||
+        row.notes.lowercased().contains(term)
     }
 
     private var selectedAccessRow: AccessRow? {
@@ -124,11 +179,17 @@ struct ContentView: View {
                 self.selectedClientId = store.clients.first?.id
             }
         }
+        .onAppear {
+            installF1KeyMonitorIfNeeded()
+        }
+        .onDisappear {
+            removeF1KeyMonitor()
+        }
     }
 
     private var dialogsLayer: some View {
         baseLayout
-            .alert("Erro", isPresented: $showError) {
+            .alert(alertTitle, isPresented: $showError) {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(errorMessage)
@@ -161,6 +222,7 @@ struct ContentView: View {
                 Text("Deseja checar conectividade apenas do cliente selecionado ou de todos os clientes?")
             }
             .sheet(isPresented: $showHelp) { helpSheet }
+            .sheet(isPresented: $showAuditLog) { auditLogSheet }
             .sheet(isPresented: $showAddClient) {
                 AddClientView { id, name, tags, notes in
                     do {
@@ -233,6 +295,7 @@ struct ContentView: View {
             .confirmationDialog("Apagar cliente?", isPresented: Binding(get: { confirmDeleteClient != nil }, set: { if !$0 { confirmDeleteClient = nil } })) {
                 Button("Apagar (cascata)", role: .destructive) {
                     guard let client = confirmDeleteClient else { return }
+                    store.logDeleteDecision(entityType: "client", entityName: client.name, confirmed: true)
                     do {
                         try store.deleteClientCascade(clientId: client.id)
                         selectedClientId = store.clients.first?.id
@@ -240,40 +303,63 @@ struct ContentView: View {
                     } catch { showErr(error) }
                     confirmDeleteClient = nil
                 }
-                Button("Cancelar", role: .cancel) { confirmDeleteClient = nil }
+                Button("Cancelar", role: .cancel) {
+                    if let client = confirmDeleteClient {
+                        store.logDeleteDecision(entityType: "client", entityName: client.name, confirmed: false)
+                    }
+                    confirmDeleteClient = nil
+                }
             }
             .confirmationDialog("Apagar SSH?", isPresented: Binding(get: { confirmDeleteSSH != nil }, set: { if !$0 { confirmDeleteSSH = nil } })) {
                 Button("Apagar", role: .destructive) {
                     guard let item = confirmDeleteSSH else { return }
+                    store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: true)
                     do {
                         try store.deleteSSH(id: item.id)
                         selectedAccessId = filteredRows.first?.id
                     } catch { showErr(error) }
                     confirmDeleteSSH = nil
                 }
-                Button("Cancelar", role: .cancel) { confirmDeleteSSH = nil }
+                Button("Cancelar", role: .cancel) {
+                    if let item = confirmDeleteSSH {
+                        store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
+                    }
+                    confirmDeleteSSH = nil
+                }
             }
             .confirmationDialog("Apagar RDP?", isPresented: Binding(get: { confirmDeleteRDP != nil }, set: { if !$0 { confirmDeleteRDP = nil } })) {
                 Button("Apagar", role: .destructive) {
                     guard let item = confirmDeleteRDP else { return }
+                    store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: true)
                     do {
                         try store.deleteRDP(id: item.id)
                         selectedAccessId = filteredRows.first?.id
                     } catch { showErr(error) }
                     confirmDeleteRDP = nil
                 }
-                Button("Cancelar", role: .cancel) { confirmDeleteRDP = nil }
+                Button("Cancelar", role: .cancel) {
+                    if let item = confirmDeleteRDP {
+                        store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
+                    }
+                    confirmDeleteRDP = nil
+                }
             }
             .confirmationDialog("Apagar URL?", isPresented: Binding(get: { confirmDeleteURL != nil }, set: { if !$0 { confirmDeleteURL = nil } })) {
                 Button("Apagar", role: .destructive) {
                     guard let item = confirmDeleteURL else { return }
+                    store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: true)
                     do {
                         try store.deleteURL(id: item.id)
                         selectedAccessId = filteredRows.first?.id
                     } catch { showErr(error) }
                     confirmDeleteURL = nil
                 }
-                Button("Cancelar", role: .cancel) { confirmDeleteURL = nil }
+                Button("Cancelar", role: .cancel) {
+                    if let item = confirmDeleteURL {
+                        store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
+                    }
+                    confirmDeleteURL = nil
+                }
             }
     }
 
@@ -285,6 +371,7 @@ struct ContentView: View {
                     .bold()
                 Spacer()
                 Button {
+                    store.logUIAction(action: "refresh", entityName: "Dados", details: "Atualização manual acionada")
                     store.reload()
                     logs.reload()
                 } label: {
@@ -306,6 +393,7 @@ struct ContentView: View {
                         showErrText("Selecione um cliente antes de criar um acesso.")
                         return
                     }
+                    store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=botão principal")
                     showAddAccessChooser = true
                 } label: {
                     Label("Novo Acesso", systemImage: "plus.circle")
@@ -314,8 +402,23 @@ struct ContentView: View {
                 .keyboardShortcut("n", modifiers: [.command, .shift])
             }
 
+            HStack(spacing: 8) {
+                Text("Exportar: ⇧⌘B")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Text("Importar: ⇧⌘I")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField("Busca geral (cliente + acessos)...", text: $globalSearchText)
+                .textFieldStyle(.roundedBorder)
+                .focused($focusedSearchField, equals: .global)
+
             TextField("Buscar cliente...", text: $clientsSearchText)
                 .textFieldStyle(.roundedBorder)
+                .focused($focusedSearchField, equals: .clients)
 
             HStack {
                 Text("Clientes").font(.headline)
@@ -337,6 +440,9 @@ struct ContentView: View {
                     .padding(.vertical, 4)
                     .tag(client.id)
                     .contextMenu {
+                        Button("Novo Cliente") {
+                            showAddClient = true
+                        }
                         Button("Editar") { editingClient = client }
                         Button("Apagar", role: .destructive) { confirmDeleteClient = client }
                     }
@@ -349,6 +455,7 @@ struct ContentView: View {
                 Text("Arquivos").font(.caption).foregroundStyle(.secondary)
                 Text(store.clientsPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 Text(store.acessosPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                Text(store.eventosPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
         }
         .padding()
@@ -363,19 +470,20 @@ struct ContentView: View {
                     Text(selectedClient?.name ?? "Visão Geral")
                         .font(.title)
                         .bold()
-                    Text("Conexões SSH, RDP e HTTPS")
+                    Text("Conexões SSH, RDP e URL")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Ajuda") { showHelp = true }
+                Button("Ajuda") {
+                    store.logHelpOpened()
+                    showHelp = true
+                }
                     .buttonStyle(.bordered)
                     .keyboardShortcut("/", modifiers: [.command])
             }
 
-            if !logs.points.isEmpty { chartCard }
-
-            if selectedClient == nil {
+            if selectedClient == nil && !isGlobalSearchActive {
                 Text("Selecione um cliente para visualizar os acessos.")
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -384,6 +492,7 @@ struct ContentView: View {
                     HStack {
                         TextField("Buscar acesso...", text: $accessesSearchText)
                             .textFieldStyle(.roundedBorder)
+                            .focused($focusedSearchField, equals: .accesses)
                         Text("\(filteredRows.count) acessos")
                             .foregroundStyle(.secondary)
                     }
@@ -405,6 +514,11 @@ struct ContentView: View {
                             .buttonStyle(.bordered)
                             .keyboardShortcut("e", modifiers: [.command])
                             .disabled(selectedAccessRow == nil)
+                        Button(selectedAccessRow?.isFavorite == true ? "Desfavoritar" : "Favoritar") {
+                            toggleFavoriteSelectedAccess()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(selectedAccessRow == nil)
                         Button("Excluir", role: .destructive) { deleteSelectedAccess() }
                             .buttonStyle(.bordered)
                             .keyboardShortcut(.delete, modifiers: [])
@@ -428,11 +542,34 @@ struct ContentView: View {
                             accessRowView(row)
                                 .tag(row.id)
                                 .contextMenu {
+                                    Button("Novo Acesso") {
+                                        guard selectedClient != nil else {
+                                            showErrText("Selecione um cliente antes de criar um acesso.")
+                                            return
+                                        }
+                                        store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=context menu acesso")
+                                        showAddAccessChooser = true
+                                    }
+                                    Divider()
                                     Button("Abrir") { open(row: row) }
+                                    Button(row.isFavorite ? "Desfavoritar" : "Favoritar") { toggleFavorite(row: row) }
                                     Button("Clonar") { clone(row: row) }
                                     Button("Editar") { edit(row: row) }
                                     Button("Excluir", role: .destructive) { delete(row: row) }
                                 }
+                                .onTapGesture(count: 2) {
+                                    open(row: row)
+                                }
+                        }
+                    }
+                    .contextMenu {
+                        Button("Novo Acesso") {
+                            guard selectedClient != nil else {
+                                showErrText("Selecione um cliente antes de criar um acesso.")
+                                return
+                            }
+                            store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=context menu grid acessos")
+                            showAddAccessChooser = true
                         }
                     }
                 }
@@ -464,7 +601,14 @@ struct ContentView: View {
             connectivityIndicator(for: connectivityState(for: row.id), size: 10)
                 .frame(width: 54, alignment: .leading)
             Text(row.kind.rawValue).frame(width: 60, alignment: .leading)
-            Text(row.alias).frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 6) {
+                if row.isFavorite {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.yellow)
+                }
+                Text(row.alias)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             Text(row.host).frame(maxWidth: .infinity, alignment: .leading)
             Text(row.port).frame(width: 60, alignment: .leading)
             Text(row.kind == .url ? row.url : row.user)
@@ -489,6 +633,16 @@ struct ContentView: View {
         delete(row: row)
     }
 
+    private func toggleFavoriteSelectedAccess() {
+        guard let row = selectedAccessRow else { return }
+        toggleFavorite(row: row)
+    }
+
+    private func cloneSelectedAccess() {
+        guard let row = selectedAccessRow else { return }
+        clone(row: row)
+    }
+
     private func open(row: AccessRow) {
         switch row.kind {
         case .ssh:
@@ -499,7 +653,25 @@ struct ContentView: View {
             RDPFileWriter.writeAndOpen(server: access)
         case .url:
             guard let access = store.urls.first(where: { $0.id == row.id }) else { return }
-            URLLauncher.openHTTPS(host: access.host, port: access.port, path: access.path)
+            URLLauncher.openURL(scheme: access.scheme, host: access.host, port: access.port, path: access.path)
+        }
+
+        do {
+            try store.markAccessOpened(kind: row.kind, id: row.id)
+            selectedAccessId = row.id
+            logs.reload()
+        } catch {
+            showErr(error)
+        }
+    }
+
+    private func toggleFavorite(row: AccessRow) {
+        do {
+            _ = try store.toggleFavorite(kind: row.kind, id: row.id)
+            selectedAccessId = row.id
+            logs.reload()
+        } catch {
+            showErr(error)
         }
     }
 
@@ -545,6 +717,7 @@ struct ContentView: View {
                     $0.clientId.caseInsensitiveCompare(access.clientId) == .orderedSame &&
                     $0.alias.caseInsensitiveCompare(alias) == .orderedSame
                 })?.id
+                store.logCloneEvent(sourceAlias: access.alias, newAlias: alias, kind: .ssh)
             case .rdp:
                 guard let access = store.rdp.first(where: { $0.id == row.id }) else { return }
                 let alias = makeCloneAlias(base: access.alias, kind: .rdp, clientId: access.clientId)
@@ -568,6 +741,7 @@ struct ContentView: View {
                     $0.clientId.caseInsensitiveCompare(access.clientId) == .orderedSame &&
                     $0.alias.caseInsensitiveCompare(alias) == .orderedSame
                 })?.id
+                store.logCloneEvent(sourceAlias: access.alias, newAlias: alias, kind: .rdp)
             case .url:
                 guard let access = store.urls.first(where: { $0.id == row.id }) else { return }
                 let alias = makeCloneAlias(base: access.alias, kind: .url, clientId: access.clientId)
@@ -575,6 +749,7 @@ struct ContentView: View {
                     alias: alias,
                     clientId: access.clientId,
                     name: access.name,
+                    scheme: access.scheme,
                     host: access.host,
                     port: access.port,
                     path: access.path,
@@ -585,6 +760,7 @@ struct ContentView: View {
                     $0.clientId.caseInsensitiveCompare(access.clientId) == .orderedSame &&
                     $0.alias.caseInsensitiveCompare(alias) == .orderedSame
                 })?.id
+                store.logCloneEvent(sourceAlias: access.alias, newAlias: alias, kind: .url)
             }
         } catch {
             showErr(error)
@@ -621,22 +797,61 @@ struct ContentView: View {
         return "\(fallback)-copia-\(UUID().uuidString.prefix(6))"
     }
 
-    private var chartCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Conexões por dia (SSH x RDP)").font(.headline)
-            Chart(logs.points) { point in
-                BarMark(
-                    x: .value("Dia", point.day, unit: .day),
-                    y: .value("Qtd", point.count)
-                )
-                .foregroundStyle(point.type == .ssh ? .blue : .cyan)
-                .position(by: .value("Tipo", point.type.rawValue))
+    private func exportCSVs() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Exportar"
+        panel.message = "Escolha a pasta de destino para exportar clientes.csv, acessos.csv e eventos.csv."
+
+        guard panel.runModal() == .OK, let directoryURL = panel.url else { return }
+
+        let fm = FileManager.default
+        let targets = [
+            directoryURL.appendingPathComponent("clientes.csv"),
+            directoryURL.appendingPathComponent("acessos.csv"),
+            directoryURL.appendingPathComponent("eventos.csv")
+        ]
+        let existing = targets.filter { fm.fileExists(atPath: $0.path) }
+        if !existing.isEmpty {
+            let alert = NSAlert()
+            alert.messageText = "Sobrescrever arquivos existentes?"
+            alert.informativeText = "Já existem arquivos CSV na pasta de destino. Deseja sobrescrever?"
+            alert.alertStyle = .warning
+            alert.addButton(withTitle: "Sobrescrever")
+            alert.addButton(withTitle: "Cancelar")
+            if alert.runModal() != .alertFirstButtonReturn {
+                return
             }
-            .frame(height: 120)
         }
-        .padding()
-        .background(Color(red: 0.05, green: 0.07, blue: 0.12))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
+
+        do {
+            try store.exportCSVs(to: directoryURL)
+            showInfoText("Exportação concluída em: \(directoryURL.path)")
+        } catch {
+            showErr(error)
+        }
+    }
+
+    private func importCSVs() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.allowsMultipleSelection = true
+        panel.prompt = "Importar"
+        panel.message = "Selecione clientes.csv e acessos.csv (eventos.csv é opcional)."
+
+        guard panel.runModal() == .OK else { return }
+
+        do {
+            try store.importCSVs(from: panel.urls)
+            logs.reload()
+        } catch {
+            showErr(error)
+        }
     }
 
     private var helpSheet: some View {
@@ -651,13 +866,22 @@ struct ContentView: View {
                         .font(.headline)
                     VStack(alignment: .leading, spacing: 4) {
                         Text("⌘R  — Atualizar dados")
+                        Text("⌘K  — Focar busca global")
+                        Text("⌘F  — Focar busca de clientes")
+                        Text("⇧⌘F — Focar busca de acessos")
+                        Text("⌘L  — Limpar buscas")
                         Text("⌘N  — Novo Cliente")
                         Text("⇧⌘N — Novo Acesso")
+                        Text("⇧⌘D — Clonar acesso selecionado")
                         Text("⇧⌘K — Checar conectividade")
+                        Text("⇧⌘B — Exportar CSVs")
+                        Text("⇧⌘I — Importar CSVs")
+                        Text("⌥⌘J — Exibir auditoria de eventos")
                         Text("↩︎   — Abrir acesso selecionado")
                         Text("⌘E  — Editar acesso selecionado")
+                        Text("Botão Favoritar — alterna favorito do acesso selecionado")
                         Text("⌫   — Excluir acesso selecionado")
-                        Text("⌘/  — Abrir Ajuda")
+                        Text("⌘/ ou F1 — Abrir Ajuda")
                         Text("No diálogo \"Novo acesso\":")
                         Text("⌘1  — Cadastrar SSH")
                         Text("⌘2  — Cadastrar RDP")
@@ -677,6 +901,9 @@ struct ContentView: View {
                     Text("Acessos: \(store.acessosPath)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    Text("Eventos: \(store.eventosPath)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding()
@@ -690,11 +917,260 @@ struct ContentView: View {
         .presentationDetents([.large])
     }
 
+    private var auditLogSheet: some View {
+        NavigationStack {
+            ScrollView {
+                Text(auditLogText)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Button("Fechar") { showAuditLog = false }
+                }
+            }
+            .onAppear {
+                loadAuditLogText()
+            }
+        }
+        .presentationDetents([.large])
+    }
+
+    private var shortcutActionsView: some View {
+        VStack {
+            Button(action: focusGlobalSearch) { EmptyView() }
+                .keyboardShortcut("k", modifiers: [.command])
+            Button(action: focusClientsSearch) { EmptyView() }
+                .keyboardShortcut("f", modifiers: [.command])
+            Button(action: focusAccessesSearch) { EmptyView() }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+            Button(action: clearSearches) { EmptyView() }
+                .keyboardShortcut("l", modifiers: [.command])
+            Button(action: cloneSelectedAccess) { EmptyView() }
+                .keyboardShortcut("d", modifiers: [.command, .shift])
+            Button(action: exportCSVs) { EmptyView() }
+                .keyboardShortcut("b", modifiers: [.command, .shift])
+            Button(action: importCSVs) { EmptyView() }
+                .keyboardShortcut("i", modifiers: [.command, .shift])
+            Button(action: openAuditLog) { EmptyView() }
+                .keyboardShortcut("j", modifiers: [.command, .option])
+        }
+    }
+
+    private func focusGlobalSearch() {
+        focusedSearchField = .global
+    }
+
+    private func focusClientsSearch() {
+        focusedSearchField = .clients
+    }
+
+    private func focusAccessesSearch() {
+        focusedSearchField = .accesses
+    }
+
+    private func clearSearches() {
+        globalSearchText = ""
+        clientsSearchText = ""
+        accessesSearchText = ""
+        store.logUIAction(action: "clear_searches", entityName: "Busca", details: "Campos de busca limpos")
+    }
+
+    private func openAuditLog() {
+        loadAuditLogText()
+        store.logUIAction(action: "audit_log_opened", entityName: "Auditoria", details: "Visualização de eventos aberta")
+        showAuditLog = true
+    }
+
+    private func installF1KeyMonitorIfNeeded() {
+        guard f1KeyMonitor == nil else { return }
+        f1KeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == 122 {
+                store.logHelpOpened()
+                showHelp = true
+                return nil
+            }
+            return event
+        }
+    }
+
+    private func removeF1KeyMonitor() {
+        guard let f1KeyMonitor else { return }
+        NSEvent.removeMonitor(f1KeyMonitor)
+        self.f1KeyMonitor = nil
+    }
+
+    private func loadAuditLogText() {
+        let url = URL(fileURLWithPath: store.eventosPath)
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else {
+            auditLogText = "LOG DE EVENTOS\n\nNenhum arquivo de eventos encontrado em:\n\(store.eventosPath)"
+            return
+        }
+
+        let lines = content.split(whereSeparator: \.isNewline).map(String.init)
+        guard lines.count > 1 else {
+            auditLogText = "LOG DE EVENTOS\n\nArquivo vazio: \(store.eventosPath)"
+            return
+        }
+
+        let header = splitCSV(lines[0])
+        let map = makeColumnMap(header)
+        let tsIdx = findColumn(map, aliases: ["timestamputc"]) ?? 0
+        let actionIdx = findColumn(map, aliases: ["action"]) ?? 1
+        let entityTypeIdx = findColumn(map, aliases: ["entitytype"]) ?? 2
+        let entityNameIdx = findColumn(map, aliases: ["entityname"]) ?? 3
+        let detailsIdx = findColumn(map, aliases: ["details"]) ?? 4
+
+        struct EventLine {
+            let timestampRaw: String
+            let timestamp: Date?
+            let action: String
+            let entityType: String
+            let entityName: String
+            let details: String
+        }
+
+        let events = lines.dropFirst().map { line -> EventLine in
+            let cells = splitCSV(line)
+            let timestampRaw = cell(cells, at: tsIdx)
+            return EventLine(
+                timestampRaw: timestampRaw,
+                timestamp: parseEventDate(timestampRaw),
+                action: cell(cells, at: actionIdx),
+                entityType: cell(cells, at: entityTypeIdx),
+                entityName: cell(cells, at: entityNameIdx),
+                details: cell(cells, at: detailsIdx)
+            )
+        }
+        .sorted { lhs, rhs in
+            (lhs.timestamp ?? .distantPast) > (rhs.timestamp ?? .distantPast)
+        }
+
+        let recent = Array(events.prefix(120))
+        let recentOpen = Array(recent.filter { $0.action.caseInsensitiveCompare("open") == .orderedSame }.prefix(40))
+
+        let outputDate = DateFormatter()
+        outputDate.locale = Locale(identifier: "pt_BR")
+        outputDate.dateFormat = "dd/MM HH:mm:ss"
+
+        var report: [String] = []
+        report.append("LOG DE EVENTOS (últimos 120)")
+        report.append("════════════════════════════════════════════")
+        report.append("")
+        report.append("ÚLTIMOS ACESSOS:")
+
+        if recentOpen.isEmpty {
+            report.append("- Nenhum acesso recente registrado.")
+        } else {
+            for item in recentOpen {
+                let when = item.timestamp.map { outputDate.string(from: $0) } ?? item.timestampRaw
+                report.append("- \(when) | \(item.entityName) | \(item.details)")
+            }
+        }
+
+        report.append("")
+        report.append("EVENTOS GERAIS:")
+
+        if recent.isEmpty {
+            report.append("- Nenhum evento registrado.")
+        } else {
+            for item in recent {
+                let when = item.timestamp.map { outputDate.string(from: $0) } ?? item.timestampRaw
+                report.append("- \(when) | \(item.action) | \(item.entityType) | \(item.entityName) | \(item.details)")
+            }
+        }
+
+        if recent.isEmpty && lines.count > 1 {
+            report.append("")
+            report.append("DEBUG: conteúdo bruto")
+            for raw in lines.dropFirst().prefix(20) {
+                report.append("- \(raw)")
+            }
+        }
+
+        report.append("")
+        report.append("Arquivo: \(store.eventosPath)")
+        auditLogText = report.joined(separator: "\n")
+    }
+
+    private func parseEventDate(_ value: String) -> Date? {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "MM/dd/yyyy HH:mm:ss"
+        return formatter.date(from: value)
+    }
+
+    private func splitCSV(_ line: String) -> [String] {
+        var values: [String] = []
+        var current = ""
+        var isQuoted = false
+        let chars = Array(line)
+        var index = 0
+        while index < chars.count {
+            let char = chars[index]
+            if char == "\"" {
+                if isQuoted && index + 1 < chars.count && chars[index + 1] == "\"" {
+                    current.append("\"")
+                    index += 1
+                } else {
+                    isQuoted.toggle()
+                }
+            } else if char == "," && !isQuoted {
+                values.append(current)
+                current = ""
+            } else {
+                current.append(char)
+            }
+            index += 1
+        }
+        values.append(current)
+        return values
+    }
+
+    private func makeColumnMap(_ columns: [String]) -> [String: Int] {
+        var map: [String: Int] = [:]
+        for (index, raw) in columns.enumerated() {
+            map[normalizeHeader(raw)] = index
+        }
+        return map
+    }
+
+    private func findColumn(_ map: [String: Int], aliases: [String]) -> Int? {
+        for alias in aliases {
+            if let idx = map[normalizeHeader(alias)] {
+                return idx
+            }
+        }
+        return nil
+    }
+
+    private func normalizeHeader(_ value: String) -> String {
+        value
+            .folding(options: .diacriticInsensitive, locale: .current)
+            .lowercased()
+            .replacingOccurrences(of: " ", with: "")
+            .replacingOccurrences(of: "_", with: "")
+    }
+
+    private func cell(_ values: [String], at index: Int) -> String {
+        guard values.indices.contains(index) else { return "" }
+        return values[index].trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func showErr(_ error: Error) {
         showErrText(error.localizedDescription)
     }
 
     private func showErrText(_ message: String) {
+        alertTitle = "Erro"
+        errorMessage = message
+        showError = true
+    }
+
+    private func showInfoText(_ message: String) {
+        alertTitle = "Informação"
         errorMessage = message
         showError = true
     }
@@ -703,6 +1179,11 @@ struct ContentView: View {
         let rows = allRowsForSelectedClient
         guard !rows.isEmpty else { return }
 
+        if let selectedClient {
+            store.logConnectivityCheck(scope: "cliente:\(selectedClient.name)", rowCount: rows.count)
+        } else {
+            store.logConnectivityCheck(scope: "cliente", rowCount: rows.count)
+        }
         performConnectivityCheck(rows: rows)
     }
 
@@ -710,6 +1191,7 @@ struct ContentView: View {
         let rows = store.clients.flatMap { allRows(for: $0.id) }
         guard !rows.isEmpty else { return }
 
+        store.logConnectivityCheck(scope: "todos", rowCount: rows.count)
         performConnectivityCheck(rows: rows)
     }
 

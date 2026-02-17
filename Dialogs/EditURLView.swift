@@ -11,12 +11,12 @@ struct EditURLView: View {
         self._item = State(initialValue: item)
         self.onSave = onSave
         let portPart = item.port == 443 ? "" : ":\(item.port)"
-        self._urlText = State(initialValue: "https://\(item.host)\(portPart)\(item.path)")
+        self._urlText = State(initialValue: "\(item.scheme)://\(item.host)\(portPart)\(item.path)")
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Editar URL (HTTPS)").font(.title2).bold()
+            Text("Editar URL").font(.title2).bold()
 
             Form {
                 TextField("Alias", text: $item.alias)
@@ -32,7 +32,8 @@ struct EditURLView: View {
                 Button("Cancelar") { dismiss() }
                 Spacer()
                 Button("Salvar") {
-                    let parsed = parseHTTPS(urlText.trimmed)
+                    let parsed = parseURL(urlText.trimmed)
+                    item.scheme = parsed.scheme
                     item.host = parsed.host
                     item.port = parsed.port
                     item.path = parsed.path
@@ -46,13 +47,27 @@ struct EditURLView: View {
         .preferredColorScheme(.dark)
     }
 
-    private func parseHTTPS(_ s: String) -> (host: String, port: Int, path: String) {
-        let raw = s.lowercased().hasPrefix("http") ? s : "https://\(s)"
-        guard let comps = URLComponents(string: raw) else { return (item.host, item.port, item.path) }
+    private func parseURL(_ s: String) -> (scheme: String, host: String, port: Int, path: String) {
+        let raw = s.contains("://") ? s : "http://\(s)"
+        guard let comps = URLComponents(string: raw) else { return (item.scheme, item.host, item.port, item.path) }
+        let scheme = (comps.scheme ?? item.scheme).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let host = comps.host ?? item.host
-        let port = comps.port ?? 443
+        let port = comps.port ?? defaultPort(for: scheme)
         let path = comps.path.isEmpty ? "/" : comps.path
-        return (host, port, path)
+        return (scheme, host, port, path)
+    }
+
+    private func defaultPort(for scheme: String) -> Int {
+        switch scheme {
+        case "http":
+            return 80
+        case "https":
+            return 443
+        case "ftp":
+            return 21
+        default:
+            return 80
+        }
     }
 }
 

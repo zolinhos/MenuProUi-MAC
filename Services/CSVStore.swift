@@ -16,18 +16,114 @@ final class CSVStore: ObservableObject {
 
     private let clientsURL: URL
     private let accessesURL: URL
+    private let eventsURL: URL
 
     var clientsPath: String { clientsURL.path }
     var acessosPath: String { accessesURL.path }
+    var eventosPath: String { eventsURL.path }
 
     init() {
         clientsURL = Self.dataDirectoryURL.appendingPathComponent("clientes.csv")
         accessesURL = Self.dataDirectoryURL.appendingPathComponent("acessos.csv")
+        eventsURL = Self.dataDirectoryURL.appendingPathComponent("eventos.csv")
         try? FileManager.default.createDirectory(at: Self.dataDirectoryURL, withIntermediateDirectories: true)
         ensureFile(clientsURL, header: "Id,Nome,Observacoes,CriadoEm,AtualizadoEm")
-        ensureFile(accessesURL, header: "Id,ClientId,Tipo,Apelido,Nome,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm")
+        ensureFile(accessesURL, header: "Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,IsFavorite,OpenCount,LastOpenedAt,CriadoEm,AtualizadoEm")
         migrateAccessesIfNeeded()
         reload()
+    }
+
+    private func logEvent(action: String, entityType: String, entityName: String, details: String) {
+        EventLogger().log(action: action, entityType: entityType, entityName: entityName, details: details)
+    }
+
+    func logCloneEvent(sourceAlias: String, newAlias: String, kind: AccessKind) {
+        logEvent(
+            action: "clone",
+            entityType: "access",
+            entityName: newAlias,
+            details: "Clonado de \(sourceAlias); Tipo=\(kind.rawValue)"
+        )
+    }
+
+    func logConnectivityCheck(scope: String, rowCount: Int) {
+        logEvent(
+            action: "check_connectivity",
+            entityType: "access",
+            entityName: scope,
+            details: "Checagem executada; Itens=\(max(0, rowCount))"
+        )
+    }
+
+    func logHelpOpened() {
+        logEvent(
+            action: "help_opened",
+            entityType: "ui",
+            entityName: "Ajuda",
+            details: "Painel de ajuda aberto"
+        )
+    }
+
+    func logUIAction(action: String, entityName: String, details: String) {
+        logEvent(action: action, entityType: "ui", entityName: entityName, details: details)
+    }
+
+    func logDeleteDecision(entityType: String, entityName: String, confirmed: Bool) {
+        logEvent(
+            action: confirmed ? "delete_confirmed" : "delete_cancelled",
+            entityType: entityType,
+            entityName: entityName,
+            details: confirmed ? "Exclusão confirmada" : "Exclusão cancelada"
+        )
+    }
+
+    func exportCSVs(to directoryURL: URL) throws {
+        let fm = FileManager.default
+        try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let exportedClients = directoryURL.appendingPathComponent("clientes.csv")
+        let exportedAccesses = directoryURL.appendingPathComponent("acessos.csv")
+        let exportedEvents = directoryURL.appendingPathComponent("eventos.csv")
+
+        if fm.fileExists(atPath: exportedClients.path) { try fm.removeItem(at: exportedClients) }
+        if fm.fileExists(atPath: exportedAccesses.path) { try fm.removeItem(at: exportedAccesses) }
+        if fm.fileExists(atPath: exportedEvents.path) { try fm.removeItem(at: exportedEvents) }
+
+        try fm.copyItem(at: clientsURL, to: exportedClients)
+        try fm.copyItem(at: accessesURL, to: exportedAccesses)
+        if fm.fileExists(atPath: eventsURL.path) {
+            try fm.copyItem(at: eventsURL, to: exportedEvents)
+        }
+
+        logEvent(action: "export", entityType: "data", entityName: "csv", details: "Exportado para \(directoryURL.path)")
+    }
+
+    func importCSVs(from fileURLs: [URL]) throws {
+        let fm = FileManager.default
+        var byName: [String: URL] = [:]
+
+        for fileURL in fileURLs {
+            byName[fileURL.lastPathComponent.lowercased()] = fileURL
+        }
+
+        guard let clientsFile = byName["clientes.csv"], let accessesFile = byName["acessos.csv"] else {
+            throw NSError(domain: "CSVStore", code: 1001, userInfo: [NSLocalizedDescriptionKey: "Selecione ao menos clientes.csv e acessos.csv para importar."])
+        }
+
+        if fm.fileExists(atPath: clientsURL.path) { try fm.removeItem(at: clientsURL) }
+        if fm.fileExists(atPath: accessesURL.path) { try fm.removeItem(at: accessesURL) }
+
+        try fm.copyItem(at: clientsFile, to: clientsURL)
+        try fm.copyItem(at: accessesFile, to: accessesURL)
+
+        if let eventsFile = byName["eventos.csv"] {
+            if fm.fileExists(atPath: eventsURL.path) { try fm.removeItem(at: eventsURL) }
+            try fm.copyItem(at: eventsFile, to: eventsURL)
+        }
+
+        migrateAccessesIfNeeded()
+        reload()
+        logEvent(action: "import", entityType: "data", entityName: "csv", details: "Importado de \(clientsFile.deletingLastPathComponent().path)")
     }
 
     func reload() {
@@ -46,7 +142,10 @@ final class CSVStore: ObservableObject {
                     port: $0.port,
                     user: $0.user,
                     tags: $0.tags,
-                    notes: $0.notes
+                    notes: $0.notes,
+                    isFavorite: $0.isFavorite,
+                    openCount: $0.openCount,
+                    lastOpenedAt: $0.lastOpenedAt
                 )
             }
         rdp = rows
@@ -67,7 +166,10 @@ final class CSVStore: ObservableObject {
                     dynamicResolution: $0.rdpDynamicResolution,
                     width: $0.rdpWidth,
                     height: $0.rdpHeight,
-                    notes: $0.notes
+                    notes: $0.notes,
+                    isFavorite: $0.isFavorite,
+                    openCount: $0.openCount,
+                    lastOpenedAt: $0.lastOpenedAt
                 )
             }
         urls = rows
@@ -78,11 +180,15 @@ final class CSVStore: ObservableObject {
                     alias: $0.alias,
                     clientId: $0.clientId,
                     name: $0.name,
+                    scheme: $0.scheme,
                     host: $0.host,
                     port: $0.port,
                     path: $0.path,
                     tags: $0.tags,
-                    notes: $0.notes
+                    notes: $0.notes,
+                    isFavorite: $0.isFavorite,
+                    openCount: $0.openCount,
+                    lastOpenedAt: $0.lastOpenedAt
                 )
             }
     }
@@ -90,9 +196,11 @@ final class CSVStore: ObservableObject {
     func addClient(id: String, name: String, tags: String, notes: String) throws {
         var rows = loadClientRows()
         let now = nowTimestamp()
-        rows.append(ClientRow(id: id.isEmpty ? UUID().uuidString : id, name: name, tags: tags, notes: notes, createdAt: now, updatedAt: now))
+        let clientId = id.isEmpty ? UUID().uuidString : id
+        rows.append(ClientRow(id: clientId, name: name, tags: tags, notes: notes, createdAt: now, updatedAt: now))
         try saveClientRows(rows)
         reload()
+        logEvent(action: "create", entityType: "client", entityName: name, details: "Cliente criado")
     }
 
     func updateClient(_ updated: Client) throws {
@@ -103,10 +211,12 @@ final class CSVStore: ObservableObject {
         rows[idx].notes = updated.notes
         try saveClientRows(rows)
         reload()
+        logEvent(action: "edit", entityType: "client", entityName: updated.name, details: "Cliente atualizado")
     }
 
     func deleteClientCascade(clientId: String) throws {
         var clientRows = loadClientRows()
+        let deletedClient = clientRows.first { $0.id.caseInsensitiveCompare(clientId) == .orderedSame }
         clientRows.removeAll { $0.id.caseInsensitiveCompare(clientId) == .orderedSame }
         try saveClientRows(clientRows)
 
@@ -114,6 +224,7 @@ final class CSVStore: ObservableObject {
         accessRows.removeAll { $0.clientId.caseInsensitiveCompare(clientId) == .orderedSame }
         try saveAccessRows(accessRows)
         reload()
+        logEvent(action: "delete", entityType: "client", entityName: deletedClient?.name ?? clientId, details: "Cliente excluído em cascata")
     }
 
     func addSSH(alias: String, clientId: String, name: String, host: String, port: Int, user: String, tags: String, notes: String) throws {
@@ -135,14 +246,19 @@ final class CSVStore: ObservableObject {
                 rdpWidth: nil,
                 rdpHeight: nil,
                 path: "",
+                scheme: "https",
                 tags: tags,
                 notes: notes,
+                isFavorite: false,
+                openCount: 0,
+                lastOpenedAt: "",
                 createdAt: nowTimestamp(),
                 updatedAt: nowTimestamp()
             )
         )
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "create", entityType: "access", entityName: alias, details: "Acesso SSH criado")
     }
 
     func updateSSH(_ updated: SSHServer) throws {
@@ -156,15 +272,21 @@ final class CSVStore: ObservableObject {
         rows[idx].user = updated.user
         rows[idx].tags = updated.tags
         rows[idx].notes = updated.notes
+        rows[idx].isFavorite = updated.isFavorite
+        rows[idx].openCount = max(0, updated.openCount)
+        rows[idx].lastOpenedAt = updated.lastOpenedAt
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "edit", entityType: "access", entityName: updated.alias, details: "Acesso SSH atualizado")
     }
 
     func deleteSSH(id: String) throws {
         var rows = loadAccessRows()
+        let deleted = rows.first { $0.kind == .ssh && $0.id.caseInsensitiveCompare(id) == .orderedSame }
         rows.removeAll { $0.kind == .ssh && $0.id.caseInsensitiveCompare(id) == .orderedSame }
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "delete", entityType: "access", entityName: deleted?.alias ?? id, details: "Acesso SSH excluído")
     }
 
     func addRDP(payload: AddRDPPayload) throws {
@@ -186,14 +308,19 @@ final class CSVStore: ObservableObject {
                 rdpWidth: payload.width,
                 rdpHeight: payload.height,
                 path: "",
+                scheme: "https",
                 tags: payload.tags,
                 notes: payload.notes,
+                isFavorite: false,
+                openCount: 0,
+                lastOpenedAt: "",
                 createdAt: nowTimestamp(),
                 updatedAt: nowTimestamp()
             )
         )
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "create", entityType: "access", entityName: payload.alias, details: "Acesso RDP criado")
     }
 
     func updateRDP(_ updated: RDPServer) throws {
@@ -213,15 +340,21 @@ final class CSVStore: ObservableObject {
         rows[idx].rdpWidth = updated.width
         rows[idx].rdpHeight = updated.height
         rows[idx].notes = updated.notes
+        rows[idx].isFavorite = updated.isFavorite
+        rows[idx].openCount = max(0, updated.openCount)
+        rows[idx].lastOpenedAt = updated.lastOpenedAt
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "edit", entityType: "access", entityName: updated.alias, details: "Acesso RDP atualizado")
     }
 
     func deleteRDP(id: String) throws {
         var rows = loadAccessRows()
+        let deleted = rows.first { $0.kind == .rdp && $0.id.caseInsensitiveCompare(id) == .orderedSame }
         rows.removeAll { $0.kind == .rdp && $0.id.caseInsensitiveCompare(id) == .orderedSame }
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "delete", entityType: "access", entityName: deleted?.alias ?? id, details: "Acesso RDP excluído")
     }
 
     func addURL(_ access: URLAccess) throws {
@@ -234,7 +367,7 @@ final class CSVStore: ObservableObject {
                 alias: access.alias,
                 name: access.name,
                 host: access.host,
-                port: sanitizePort(access.port, fallback: 443),
+                port: sanitizePort(access.port, fallback: defaultPort(for: sanitizeScheme(access.scheme))),
                 user: "",
                 domain: "",
                 rdpIgnoreCert: true,
@@ -243,14 +376,19 @@ final class CSVStore: ObservableObject {
                 rdpWidth: nil,
                 rdpHeight: nil,
                 path: sanitizePath(access.path),
+                scheme: sanitizeScheme(access.scheme),
                 tags: access.tags,
                 notes: access.notes,
+                isFavorite: false,
+                openCount: 0,
+                lastOpenedAt: "",
                 createdAt: nowTimestamp(),
                 updatedAt: nowTimestamp()
             )
         )
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "create", entityType: "access", entityName: access.alias, details: "Acesso URL criado")
     }
 
     func updateURL(_ access: URLAccess) throws {
@@ -259,20 +397,65 @@ final class CSVStore: ObservableObject {
         rows[idx].clientId = access.clientId
         rows[idx].alias = access.alias
         rows[idx].name = access.name
+        rows[idx].scheme = sanitizeScheme(access.scheme)
         rows[idx].host = access.host
-        rows[idx].port = sanitizePort(access.port, fallback: 443)
+        rows[idx].port = sanitizePort(access.port, fallback: defaultPort(for: rows[idx].scheme))
         rows[idx].path = sanitizePath(access.path)
         rows[idx].tags = access.tags
         rows[idx].notes = access.notes
+        rows[idx].isFavorite = access.isFavorite
+        rows[idx].openCount = max(0, access.openCount)
+        rows[idx].lastOpenedAt = access.lastOpenedAt
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "edit", entityType: "access", entityName: access.alias, details: "Acesso URL atualizado")
     }
 
     func deleteURL(id: String) throws {
         var rows = loadAccessRows()
+        let deleted = rows.first { $0.kind == .url && $0.id.caseInsensitiveCompare(id) == .orderedSame }
         rows.removeAll { $0.kind == .url && $0.id.caseInsensitiveCompare(id) == .orderedSame }
         try saveAccessRows(rows)
         reload()
+        logEvent(action: "delete", entityType: "access", entityName: deleted?.alias ?? id, details: "Acesso URL excluído")
+    }
+
+    func toggleFavorite(kind: AccessKind, id: String) throws -> Bool {
+        var rows = loadAccessRows()
+        guard let idx = rows.firstIndex(where: { $0.kind == kind && $0.id.caseInsensitiveCompare(id) == .orderedSame }) else {
+            return false
+        }
+        rows[idx].isFavorite.toggle()
+        rows[idx].updatedAt = nowTimestamp()
+        let isFavorite = rows[idx].isFavorite
+        let accessName = rows[idx].alias.isEmpty ? rows[idx].name : rows[idx].alias
+        try saveAccessRows(rows)
+        reload()
+        logEvent(action: "favorite", entityType: "access", entityName: accessName, details: isFavorite ? "Favoritado" : "Desfavoritado")
+        return isFavorite
+    }
+
+    func markAccessOpened(kind: AccessKind, id: String) throws {
+        var rows = loadAccessRows()
+        guard let idx = rows.firstIndex(where: { $0.kind == kind && $0.id.caseInsensitiveCompare(id) == .orderedSame }) else {
+            return
+        }
+
+        rows[idx].openCount = max(0, rows[idx].openCount) + 1
+        rows[idx].lastOpenedAt = nowTimestamp()
+        rows[idx].updatedAt = nowTimestamp()
+        let accessName = rows[idx].alias.isEmpty ? rows[idx].name : rows[idx].alias
+        let accessType = rows[idx].kind.rawValue
+
+        try saveAccessRows(rows)
+        reload()
+
+        logEvent(
+            action: "open",
+            entityType: "access",
+            entityName: accessName,
+            details: "Acesso aberto; Tipo=\(accessType)"
+        )
     }
 
     private struct ClientRow {
@@ -300,8 +483,12 @@ final class CSVStore: ObservableObject {
         var rdpWidth: Int?
         var rdpHeight: Int?
         var path: String
+        var scheme: String
         var tags: String
         var notes: String
+        var isFavorite: Bool
+        var openCount: Int
+        var lastOpenedAt: String
         var createdAt: String
         var updatedAt: String
     }
@@ -356,7 +543,10 @@ final class CSVStore: ObservableObject {
         let urlIdx = findColumn(map, aliases: ["url"])
         let pathIdx = findColumn(map, aliases: ["path"])
         let tagsIdx = findColumn(map, aliases: ["tags"])
-        let notesIdx = findColumn(map, aliases: ["observacoes", "observacao", "notes"]) ?? 14
+        let notesIdx = findColumn(map, aliases: ["observacoes", "observacao", "notes"])
+        let favoriteIdx = findColumn(map, aliases: ["isfavorite", "favorite"])
+        let openCountIdx = findColumn(map, aliases: ["opencount", "open_count"])
+        let lastOpenedIdx = findColumn(map, aliases: ["lastopenedat", "last_opened_at"])
         let createdIdx = findColumn(map, aliases: ["criadoem", "createdat"])
         let updatedIdx = findColumn(map, aliases: ["atualizadoem", "updatedat"])
 
@@ -370,13 +560,15 @@ final class CSVStore: ObservableObject {
             let rawPort = cell(c, at: portIdx)
             let trimmedPort = rawPort.trimmingCharacters(in: .whitespacesAndNewlines)
             let numericPort = Int(trimmedPort) ?? Int(trimmedPort.filter({ $0.isNumber }))
-            var port = sanitizePort(numericPort ?? 0, fallback: kind == .ssh ? 22 : (kind == .rdp ? 3389 : 443))
+            var port = sanitizePort(numericPort ?? 0, fallback: kind == .ssh ? 22 : (kind == .rdp ? 3389 : 80))
             var path = pathIdx.map { sanitizePath(cell(c, at: $0)) } ?? "/"
+            var scheme = "http"
             let urlValue = urlIdx.map { cell(c, at: $0) } ?? ""
             if !urlValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let parsed = parseURL(urlValue)
                 let parsedHost = parsed.host.trimmingCharacters(in: .whitespacesAndNewlines)
                 if !parsedHost.isEmpty {
+                    scheme = parsed.scheme
                     host = parsed.host
                     port = parsed.port
                     path = parsed.path
@@ -389,7 +581,7 @@ final class CSVStore: ObservableObject {
                 let candidate = trimmedPort
                 if isLikelyIPAddress(candidate) {
                     host = candidate
-                    port = kind == .ssh ? 22 : (kind == .rdp ? 3389 : 443)
+                    port = kind == .ssh ? 22 : (kind == .rdp ? 3389 : 80)
                 }
             }
 
@@ -411,8 +603,12 @@ final class CSVStore: ObservableObject {
                 rdpWidth: Int(cell(c, at: widthIdx)),
                 rdpHeight: Int(cell(c, at: heightIdx)),
                 path: path,
+                scheme: sanitizeScheme(scheme),
                 tags: tagsIdx.map { cell(c, at: $0) } ?? "",
-                notes: cell(c, at: notesIdx),
+                notes: notesIdx.map { cell(c, at: $0) } ?? "",
+                isFavorite: favoriteIdx.map { parseBool(cell(c, at: $0)) } ?? false,
+                openCount: openCountIdx.map { Int(cell(c, at: $0)) ?? 0 } ?? 0,
+                lastOpenedAt: lastOpenedIdx.map { cell(c, at: $0) } ?? "",
                 createdAt: createdIdx.map { cell(c, at: $0) } ?? "",
                 updatedAt: updatedIdx.map { cell(c, at: $0) } ?? ""
             )
@@ -430,14 +626,15 @@ final class CSVStore: ObservableObject {
     }
 
     private func saveAccessRows(_ rows: [AccessRowStored]) throws {
-        let header = "Id,ClientId,Tipo,Apelido,Nome,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm"
+        let header = "Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,IsFavorite,OpenCount,LastOpenedAt,CriadoEm,AtualizadoEm"
         let body = rows.map {
             let w = $0.rdpWidth.map(String.init) ?? ""
             let h = $0.rdpHeight.map(String.init) ?? ""
-            let url = $0.kind == .url ? formatURL(host: $0.host, port: $0.port, path: $0.path) : ""
+            let url = $0.kind == .url ? formatURL(scheme: $0.scheme, host: $0.host, port: $0.port, path: $0.path) : ""
             let createdAt = $0.createdAt.isEmpty ? nowTimestamp() : $0.createdAt
             let updatedAt = nowTimestamp()
-            return "\(csv($0.id)),\(csv($0.clientId)),\($0.kind.rawValue),\(csv($0.alias)),\(csv($0.name)),\(csv($0.host)),\($0.port),\(csv($0.user)),\(csv($0.domain)),\($0.rdpIgnoreCert),\($0.rdpFullScreen),\($0.rdpDynamicResolution),\(w),\(h),\(csv(url)),\(csv($0.notes)),\(csv(createdAt)),\(csv(updatedAt))"
+            let openCount = max(0, $0.openCount)
+            return "\(csv($0.id)),\(csv($0.clientId)),\($0.kind.rawValue),\(csv($0.alias)),\(csv($0.host)),\($0.port),\(csv($0.user)),\(csv($0.domain)),\($0.rdpIgnoreCert),\($0.rdpFullScreen),\($0.rdpDynamicResolution),\(w),\(h),\(csv(url)),\(csv($0.notes)),\($0.isFavorite),\(openCount),\(csv($0.lastOpenedAt)),\(csv(createdAt)),\(csv(updatedAt))"
         }
         try writeFile(accessesURL, lines: [header] + body)
     }
@@ -516,20 +713,24 @@ final class CSVStore: ObservableObject {
             .replacingOccurrences(of: "_", with: "")
     }
 
-    private func parseURL(_ raw: String) -> (host: String, port: Int, path: String) {
+    private func parseURL(_ raw: String) -> (scheme: String, host: String, port: Int, path: String) {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        let candidate = value.contains("://") ? value : "https://\(value)"
+        let candidate = value.contains("://") ? value : "http://\(value)"
         guard let comps = URLComponents(string: candidate) else {
-            return ("", 443, "/")
+            return ("http", "", 80, "/")
         }
+        let scheme = sanitizeScheme(comps.scheme ?? "http")
         let host = comps.host ?? ""
-        let port = sanitizePort(comps.port ?? 443, fallback: 443)
+        let fallbackPort = defaultPort(for: scheme)
+        let port = sanitizePort(comps.port ?? fallbackPort, fallback: fallbackPort)
         let path = sanitizePath(comps.percentEncodedPath.isEmpty ? "/" : comps.percentEncodedPath)
-        return (host, port, path)
+        return (scheme, host, port, path)
     }
 
-    private func formatURL(host: String, port: Int, path: String) -> String {
-        "https://\(host):\(sanitizePort(port, fallback: 443))\(sanitizePath(path))"
+    private func formatURL(scheme: String, host: String, port: Int, path: String) -> String {
+        let normalizedScheme = sanitizeScheme(scheme)
+        let fallbackPort = defaultPort(for: normalizedScheme)
+        return "\(normalizedScheme)://\(host):\(sanitizePort(port, fallback: fallbackPort))\(sanitizePath(path))"
     }
 
     private func nowTimestamp() -> String {
@@ -553,6 +754,24 @@ final class CSVStore: ObservableObject {
         let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "/" }
         return trimmed.hasPrefix("/") ? trimmed : "/\(trimmed)"
+    }
+
+    private func sanitizeScheme(_ scheme: String) -> String {
+        let normalized = scheme.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty ? "http" : normalized
+    }
+
+    private func defaultPort(for scheme: String) -> Int {
+        switch sanitizeScheme(scheme) {
+        case "http":
+            return 80
+        case "https":
+            return 443
+        case "ftp":
+            return 21
+        default:
+            return 80
+        }
     }
 
     private func isLikelyIPAddress(_ s: String) -> Bool {
@@ -606,10 +825,10 @@ final class CSVStore: ObservableObject {
             // Ensure path defaults for URL kind
             if rows[i].kind == .url {
                 rows[i].path = sanitizePath(rows[i].path)
-                rows[i].port = sanitizePort(rows[i].port, fallback: 443)
+                rows[i].port = sanitizePort(rows[i].port, fallback: defaultPort(for: rows[i].scheme))
             }
             // Ensure ports are within valid range for all kinds
-            let fallback = rows[i].kind == .ssh ? 22 : (rows[i].kind == .rdp ? 3389 : 443)
+            let fallback = rows[i].kind == .ssh ? 22 : (rows[i].kind == .rdp ? 3389 : defaultPort(for: rows[i].scheme))
             rows[i].port = sanitizePort(rows[i].port, fallback: fallback)
         }
 

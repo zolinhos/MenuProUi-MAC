@@ -4,7 +4,7 @@ Aplicativo **macOS** (SwiftUI) para centralizar, organizar e abrir acessos de in
 
 - **SSH** (host, usuário e **porta digitável**)
 - **RDP** (host, usuário/domínio e **porta digitável**, com geração de `.rdp`)
-- **HTTPS (URL)** para consoles web (Firewall, VMware, etc.), com **porta padrão 443** e suporte a portas customizadas
+- **URL (HTTP/HTTPS)** para consoles web (Firewall, VMware, etc.), com suporte a portas customizadas
 
 Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI/`.
 
@@ -21,20 +21,31 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
 - **SSH**
   - Cadastrar (alias, nome, host, **porta**, usuário, tags)
   - Abrir com 1 clique
-  - Editar, clonar e apagar
+  - Editar, clonar, favoritar e apagar
 - **RDP**
   - Cadastrar (alias, nome, host, **porta**, domínio opcional, usuário, tags)
   - Abrir com 1 clique (gera `.rdp`)
-  - Editar, clonar e apagar
+  - Editar, clonar, favoritar e apagar
   - Porta customizada gravada corretamente via `server port:i:PORT`
-- **HTTPS**
-  - Cadastrar URL completa (ex.: `https://firewall.voceconfia.com.br:4444`)
-  - Porta padrão **443** caso não seja informada
+- **URL (HTTP/HTTPS)**
+  - Cadastrar URL completa (ex.: `http://firewall.voceconfia.com.br:4444`)
+  - Porta padrão por protocolo: `80` (HTTP) e `443` (HTTPS)
   - Abrir no navegador padrão
-  - Editar, clonar e apagar
+  - Editar, clonar, favoritar e apagar
+
+### Importação/Exportação
+- Exportar `clientes.csv`, `acessos.csv` e `eventos.csv` por atalho (`⇧⌘B`)
+- Importar `clientes.csv` + `acessos.csv` (com `eventos.csv` opcional) por atalho (`⇧⌘I`)
+
+### Auditoria de eventos (padrão WIN)
+- Geração de `eventos.csv` com header `TimestampUtc,Action,EntityType,EntityName,Details`
+- Registro de ações: `create`, `edit`, `delete`, `clone`, `favorite`, `open`, `import`, `export`, `check_connectivity`, `help_opened`, `refresh`, `new_access_dialog_opened`, `delete_confirmed`, `delete_cancelled`
+- Atalho para abrir auditoria no app: `⌥⌘J`
 
 ### Saúde de conectividade (manual)
 - Botão **Checar Conectividade** por cliente (sem auto-refresh)
+- Para acessos URL, a checagem testa host/porta TCP da URL (com porta explícita ou padrão por esquema: `http` 80, `https` 443, `ftp` 21)
+- URLs sem endpoint TCP válido (ex.: caminhos locais/formatos não resolvíveis) podem retornar offline, mesmo abrindo no navegador
 - Status por acesso:
   - 🟢 online
   - 🔴 offline
@@ -46,7 +57,7 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
 - Tema escuro (azul/preto)
 - Lista de clientes na lateral (NavigationSplitView)
 - Ações rápidas (Adicionar / Abrir / Checar conectividade / Editar / Apagar)
-- (Opcional) gráficos/estatísticas se `LogParser` estiver ativo
+- Duplo clique na linha de acesso para abrir diretamente
 
 ---
 
@@ -54,8 +65,7 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
 
 - SwiftUI
 - Combine (para `ObservableObject` / `@Published`)
-- Charts (para gráfico, quando habilitado)
-- AppKit (via `NSWorkspace` para abrir SSH/HTTPS e `.rdp`)
+- AppKit (via `NSWorkspace` para abrir SSH/URL e `.rdp`)
 
 ---
 
@@ -87,7 +97,7 @@ sudo xcodebuild -license accept
 
 - SSH: app handler configurado no macOS (`ssh://`)
 - RDP: cliente RDP instalado (ex.: Microsoft Remote Desktop)
-- HTTPS: navegador padrão
+- URL (HTTP/HTTPS): navegador padrão
 
 ---
 
@@ -141,13 +151,22 @@ swift build -c release
 Atalhos úteis implementados na interface:
 
 - `⌘R` → Atualizar dados
+- `⌘K` → Focar busca global
+- `⌘F` → Focar busca de clientes
+- `⇧⌘F` → Focar busca de acessos
+- `⌘L` → Limpar buscas
 - `⌘N` → Novo Cliente
 - `⇧⌘N` → Novo Acesso
+- `⇧⌘D` → Clonar acesso selecionado
 - `⇧⌘K` → Checar conectividade
+- `⇧⌘B` → Exportar CSVs
+- `⇧⌘I` → Importar CSVs
+- `⌥⌘J` → Exibir log de eventos/últimos acessos
 - `↩︎` → Abrir acesso selecionado
 - `⌘E` → Editar acesso selecionado
 - `⌫` → Excluir acesso selecionado
-- `⌘/` → Abrir Ajuda
+- `⌘/` ou `F1` → Abrir Ajuda
+- Favoritar/Desfavoritar → botão dedicado e menu de contexto
 - No diálogo **Novo acesso**:
   - `⌘1` → Cadastrar SSH
   - `⌘2` → Cadastrar RDP
@@ -168,6 +187,7 @@ Arquivos criados:
 
 - `clientes.csv`
 - `acessos.csv`
+- `eventos.csv`
 - `rdpfiles/` (pasta para arquivos `.rdp` gerados)
 
 > Importante: o CSV é **simples** (split por vírgula). Evite vírgulas dentro dos campos.
@@ -194,17 +214,34 @@ scma,Santa Casa,,2026-02-14 12:00:00,2026-02-14 12:00:00
 
 Header:
 ```
-Id,ClientId,Tipo,Apelido,Nome,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,CriadoEm,AtualizadoEm
+Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,IsFavorite,OpenCount,LastOpenedAt,CriadoEm,AtualizadoEm
 ```
 
 Exemplo SSH:
 ```
-uuid-1,scma,SSH,scma-ssh01,Servidor Linux 01,10.0.0.10,2222,root,,,,,,, ,Acesso Linux,2026-02-14 12:00:00,2026-02-14 12:00:00
+uuid-1,scma,SSH,scma-ssh01,10.0.0.10,2222,root,,True,False,True,,,,Acesso Linux,True,3,02/17/2026 02:01:44,02/17/2026 00:56:19,02/17/2026 00:56:19
 ```
 
 Exemplo URL:
 ```
-uuid-2,scma,URL,fw-web01,Firewall Web,firewall.voceconfia.com.br,4444,,,,,,,/,,2026-02-14 12:01:00,2026-02-14 12:01:00
+uuid-2,scma,URL,fw-web01,,,,,True,False,True,,,http://192.168.0.10:4444,,False,1,02/17/2026 01:40:43,02/17/2026 01:40:10,02/17/2026 01:40:40
+```
+
+---
+
+### 3) `eventos.csv`
+
+Header:
+```
+TimestampUtc,Action,EntityType,EntityName,Details
+```
+
+Exemplo:
+```
+02/17/2026 01:51:22,create,client,teste 2 incluir,Cliente criado
+02/17/2026 02:10:00,clone,access,clone rdp,Clonado de Novo Acesso; Tipo=RDP
+02/17/2026 02:10:03,favorite,access,clone rdp,Favoritado
+02/17/2026 02:10:10,open,access,clone rdp,Acesso aberto; Tipo=RDP
 ```
 
 ---
@@ -240,11 +277,11 @@ server port:i:PORT
 
 ---
 
-### HTTPS
-O app abre no navegador padrão:
+### URL
+O app abre no navegador padrão, preservando o esquema informado (`http`, `https`, `ftp` e outros):
 
 ```
-https://host:porta/path
+esquema://host:porta/path
 ```
 
 ---
@@ -326,7 +363,7 @@ bash scripts/check_signing_setup.sh
 # 4) Gerar release notarizada
 export DEV_ID_APP_CERT="Developer ID Application: Seu Nome (TEAMID)"
 export NOTARY_PROFILE="notary-profile"
-bash scripts/release_notarized_macos.sh 1.7.3
+bash scripts/release_notarized_macos.sh 1.7.5
 ```
 
 O fluxo notarizado também executa automaticamente o preflight checklist (`scripts/release_preflight.sh`) antes de iniciar o empacotamento/notarização.
@@ -335,7 +372,7 @@ Validação final:
 
 ```bash
 spctl --assess --type execute -vvv dist/MenuProUI-MAC.app
-spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.3.dmg
+spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.5.dmg
 ```
 
 > Observação: os artefatos atuais são `arm64` (Apple Silicon). Em Mac Intel, é necessário gerar build `x86_64` ou universal.
@@ -345,7 +382,7 @@ spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.3.dmg
 Se você não quer pagar o programa da Apple, pode distribuir com assinatura ad-hoc/local:
 
 ```bash
-bash scripts/release_untrusted_macos.sh 1.7.3
+bash scripts/release_untrusted_macos.sh 1.7.5
 ```
 
 ### Publicar release em 1 comando (tag + GitHub + upload)
@@ -353,7 +390,7 @@ bash scripts/release_untrusted_macos.sh 1.7.3
 Para facilitar próximas versões, use o orquestrador abaixo:
 
 ```bash
-bash scripts/release_publish_untrusted.sh 1.7.4
+bash scripts/release_publish_untrusted.sh 1.7.5
 ```
 
 Antes de empacotar/publicar, o script executa automaticamente um **preflight checklist**:
@@ -374,7 +411,7 @@ Ele executa automaticamente:
 Se precisar informar manualmente o repositório:
 
 ```bash
-bash scripts/release_publish_untrusted.sh 1.7.4 zolinhos/MenuProUi-MAC
+bash scripts/release_publish_untrusted.sh 1.7.5 zolinhos/MenuProUi-MAC
 ```
 
 As notas da release são lidas de `dist/release_notes_v<versão>.md`.
@@ -448,7 +485,7 @@ Arquivos típicos:
   Gera `.rdp` (com porta custom) e abre via `NSWorkspace`.
 
 - `Services/URLLauncher.swift`  
-  Abre URLs HTTPS via `NSWorkspace`.
+  Abre URLs com esquema configurável via `NSWorkspace`.
 
 - `Dialogs/Add*.swift` / `Dialogs/Edit*.swift`  
   Telas de cadastro e edição.
@@ -465,9 +502,6 @@ Arquivos típicos:
 
 ## 🗺 Roadmap
 
-- Export/Import via UI
-- Busca em tempo real para clientes e acessos
-- Favoritos
 - Validação visual de host/porta/URL
 - Criptografia opcional do storage local
 - Sync opcional (ex.: iCloud Drive), se desejado
