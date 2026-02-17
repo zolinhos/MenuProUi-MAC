@@ -81,6 +81,8 @@ final class CSVStore: ObservableObject {
         let fm = FileManager.default
         try fm.createDirectory(at: directoryURL, withIntermediateDirectories: true)
 
+        let safeExportEnabled = UserDefaults.standard.bool(forKey: "export.formulaProtection")
+
         let exportedClients = directoryURL.appendingPathComponent("clientes.csv")
         let exportedAccesses = directoryURL.appendingPathComponent("acessos.csv")
         let exportedEvents = directoryURL.appendingPathComponent("eventos.csv")
@@ -89,10 +91,18 @@ final class CSVStore: ObservableObject {
         if fm.fileExists(atPath: exportedAccesses.path) { try fm.removeItem(at: exportedAccesses) }
         if fm.fileExists(atPath: exportedEvents.path) { try fm.removeItem(at: exportedEvents) }
 
-        try fm.copyItem(at: clientsURL, to: exportedClients)
-        try fm.copyItem(at: accessesURL, to: exportedAccesses)
-        if fm.fileExists(atPath: eventsURL.path) {
-            try fm.copyItem(at: eventsURL, to: exportedEvents)
+        if safeExportEnabled {
+            try exportClientsSafe(to: exportedClients)
+            try exportAccessesSafe(to: exportedAccesses)
+            if fm.fileExists(atPath: eventsURL.path) {
+                try exportEventsSafe(to: exportedEvents)
+            }
+        } else {
+            try fm.copyItem(at: clientsURL, to: exportedClients)
+            try fm.copyItem(at: accessesURL, to: exportedAccesses)
+            if fm.fileExists(atPath: eventsURL.path) {
+                try fm.copyItem(at: eventsURL, to: exportedEvents)
+            }
         }
 
         logEvent(action: "export", entityType: "data", entityName: "csv", details: "Exportado para \(directoryURL.path)")
@@ -110,20 +120,183 @@ final class CSVStore: ObservableObject {
             throw NSError(domain: "CSVStore", code: 1001, userInfo: [NSLocalizedDescriptionKey: "Selecione ao menos clientes.csv e acessos.csv para importar."])
         }
 
-        if fm.fileExists(atPath: clientsURL.path) { try fm.removeItem(at: clientsURL) }
-        if fm.fileExists(atPath: accessesURL.path) { try fm.removeItem(at: accessesURL) }
+        try validateCSVHeader(fileURL: clientsFile, requiredColumns: ["id", "nome"])
+        try validateCSVHeader(fileURL: accessesFile, requiredColumns: ["id", "clientid", "tipo"])
 
-        try fm.copyItem(at: clientsFile, to: clientsURL)
-        try fm.copyItem(at: accessesFile, to: accessesURL)
+        let backupURL = try createBackupSnapshot()
 
-        if let eventsFile = byName["eventos.csv"] {
-            if fm.fileExists(atPath: eventsURL.path) { try fm.removeItem(at: eventsURL) }
-            try fm.copyItem(at: eventsFile, to: eventsURL)
+        do {
+            if fm.fileExists(atPath: clientsURL.path) { try fm.removeItem(at: clientsURL) }
+            if fm.fileExists(atPath: accessesURL.path) { try fm.removeItem(at: accessesURL) }
+
+            try fm.copyItem(at: clientsFile, to: clientsURL)
+            try fm.copyItem(at: accessesFile, to: accessesURL)
+
+            if let eventsFile = byName["eventos.csv"] {
+                if fm.fileExists(atPath: eventsURL.path) { try fm.removeItem(at: eventsURL) }
+                try fm.copyItem(at: eventsFile, to: eventsURL)
+            }
+
+            migrateAccessesIfNeeded()
+            reload()
+            pruneBackups(keep: 5)
+            logEvent(action: "import", entityType: "data", entityName: "csv", details: "Importado de \(clientsFile.deletingLastPathComponent().path); Backup=\(backupURL.lastPathComponent)")
+        } catch {
+            try? restoreBackupSnapshot(from: backupURL)
+            throw error
+        }
+    }
+
+    private func validateCSVHeader(fileURL: URL, requiredColumns: [String]) throws {
+        let content = try String(contentsOf: fileURL, encoding: .utf8)
+        guard let firstLine = content.split(whereSeparator: \ .isNewline).first else {
+            throw NSError(domain: "CSVStore", code: 1002, userInfo: [NSLocalizedDescriptionKey: "Arquivo inválido: \(fileURL.lastPathComponent)"])
+        }
+        let headerCells = splitCSV(String(firstLine))
+        let map = makeColumnMap(headerCells)
+        for col in requiredColumns {
+            if findColumn(map, aliases: [col]) == nil {
+                throw NSError(domain: "CSVStore", code: 1003, userInfo: [NSLocalizedDescriptionKey: "Header inválido em \(fileURL.lastPathComponent): faltando coluna \(col)"])
+            }
+        }
+    }
+
+    private func backupsRootURL() -> URL {
+        Self.dataDirectoryURL.appendingPathComponent("backups", isDirectory: true)
+    }
+
+    private func createBackupSnapshot() throws -> URL {
+        let fm = FileManager.default
+        let root = backupsRootURL()
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let stamp = backupStamp()
+        let backupDir = root.appendingPathComponent(stamp, isDirectory: true)
+        try fm.createDirectory(at: backupDir, withIntermediateDirectories: true)
+
+        if fm.fileExists(atPath: clientsURL.path) {
+            try fm.copyItem(at: clientsURL, to: backupDir.appendingPathComponent("clientes.csv"))
+        }
+        if fm.fileExists(atPath: accessesURL.path) {
+            try fm.copyItem(at: accessesURL, to: backupDir.appendingPathComponent("acessos.csv"))
+        }
+        if fm.fileExists(atPath: eventsURL.path) {
+            try fm.copyItem(at: eventsURL, to: backupDir.appendingPathComponent("eventos.csv"))
+        }
+
+        return backupDir
+    }
+
+    private func restoreBackupSnapshot(from backupDir: URL) throws {
+        let fm = FileManager.default
+
+        let bClients = backupDir.appendingPathComponent("clientes.csv")
+        let bAccesses = backupDir.appendingPathComponent("acessos.csv")
+        let bEvents = backupDir.appendingPathComponent("eventos.csv")
+
+        if fm.fileExists(atPath: bClients.path) {
+            if fm.fileExists(atPath: clientsURL.path) { try? fm.removeItem(at: clientsURL) }
+            try fm.copyItem(at: bClients, to: clientsURL)
+        }
+        if fm.fileExists(atPath: bAccesses.path) {
+            if fm.fileExists(atPath: accessesURL.path) { try? fm.removeItem(at: accessesURL) }
+            try fm.copyItem(at: bAccesses, to: accessesURL)
+        }
+        if fm.fileExists(atPath: bEvents.path) {
+            if fm.fileExists(atPath: eventsURL.path) { try? fm.removeItem(at: eventsURL) }
+            try fm.copyItem(at: bEvents, to: eventsURL)
         }
 
         migrateAccessesIfNeeded()
         reload()
-        logEvent(action: "import", entityType: "data", entityName: "csv", details: "Importado de \(clientsFile.deletingLastPathComponent().path)")
+        logEvent(action: "import_rollback", entityType: "data", entityName: "csv", details: "Rollback executado; Backup=\(backupDir.lastPathComponent)")
+    }
+
+    private func pruneBackups(keep: Int) {
+        let fm = FileManager.default
+        let root = backupsRootURL()
+        guard let items = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else {
+            return
+        }
+        let sorted = items.sorted { a, b in
+            let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return da > db
+        }
+        if sorted.count <= max(0, keep) { return }
+        for url in sorted.dropFirst(max(0, keep)) {
+            try? fm.removeItem(at: url)
+        }
+    }
+
+    private func backupStamp() -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd_HHmmss"
+        return formatter.string(from: Date())
+    }
+
+    private func exportClientsSafe(to url: URL) throws {
+        let header = "Id,Nome,Observacoes,CriadoEm,AtualizadoEm"
+        let rows = loadClientRows()
+        let body = rows.map {
+            let createdAt = $0.createdAt.isEmpty ? nowTimestamp() : $0.createdAt
+            let updatedAt = $0.updatedAt.isEmpty ? nowTimestamp() : $0.updatedAt
+            return "\(csv($0.id)),\(csvExport($0.name)),\(csvExport($0.notes)),\(csv(createdAt)),\(csv(updatedAt))"
+        }
+        try writeFile(url, lines: [header] + body)
+    }
+
+    private func exportAccessesSafe(to url: URL) throws {
+        let header = "Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,IsFavorite,OpenCount,LastOpenedAt,CriadoEm,AtualizadoEm"
+        let rows = loadAccessRows()
+        let body = rows.map {
+            let w = $0.rdpWidth.map(String.init) ?? ""
+            let h = $0.rdpHeight.map(String.init) ?? ""
+            let urlValue = $0.kind == .url ? formatURL(scheme: $0.scheme, host: $0.host, port: $0.port, path: $0.path) : ""
+            let createdAt = $0.createdAt.isEmpty ? nowTimestamp() : $0.createdAt
+            let updatedAt = $0.updatedAt.isEmpty ? nowTimestamp() : $0.updatedAt
+            let openCount = max(0, $0.openCount)
+            return "\(csv($0.id)),\(csv($0.clientId)),\($0.kind.rawValue),\(csvExport($0.alias)),\(csv($0.host)),\($0.port),\(csvExport($0.user)),\(csvExport($0.domain)),\($0.rdpIgnoreCert),\($0.rdpFullScreen),\($0.rdpDynamicResolution),\(w),\(h),\(csv(urlValue)),\(csvExport($0.notes)),\($0.isFavorite),\(openCount),\(csv($0.lastOpenedAt)),\(csv(createdAt)),\(csv(updatedAt))"
+        }
+        try writeFile(url, lines: [header] + body)
+    }
+
+    private func exportEventsSafe(to url: URL) throws {
+        let lines = readLines(eventsURL)
+        guard !lines.isEmpty else {
+            try writeFile(url, lines: ["TimestampUtc,Action,EntityType,EntityName,Details"])
+            return
+        }
+
+        let header = lines[0]
+        let body = lines.dropFirst().map { line -> String in
+            let c = splitCSV(line)
+            let ts = cell(c, at: 0)
+            let action = cell(c, at: 1)
+            let entityType = cell(c, at: 2)
+            let entityName = cell(c, at: 3)
+            let details = cell(c, at: 4)
+            return "\(csv(ts)),\(csv(action)),\(csv(entityType)),\(csvExport(entityName)),\(csvExport(details))"
+        }
+
+        try writeFile(url, lines: [header] + body)
+    }
+
+    private func csvExport(_ value: String) -> String {
+        let protected = protectCSVFormula(value)
+        let escaped = protected.replacingOccurrences(of: "\"", with: "\"\"")
+        return "\"\(escaped)\""
+    }
+
+    private func protectCSVFormula(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let first = trimmed.first else { return value }
+        if first == "=" || first == "+" || first == "-" || first == "@" {
+            return "'\(value)"
+        }
+        return value
     }
 
     func reload() {

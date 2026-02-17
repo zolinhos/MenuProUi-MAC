@@ -10,6 +10,9 @@ Versão MenuProUI-MAC 1.7.9
 - Tela de Configurações para ajustar timeout, concorrência, cache e portas fallback de URL
 - Limite de concorrência configurável para manter varredura rápida sem sobrecarregar a rede
 - Cache curto configurável para evitar varreduras repetidas em sequência
+- Importação com backup automático e rollback em caso de falha
+- Rotação automática do `eventos.csv` por tamanho (evita crescimento infinito)
+- Export opcional com proteção contra CSV injection (ajustável nas Configurações)
 
 ## Notas
 - A versão 1.7.5 permanece congelada; toda evolução a partir daqui é direcionada para 1.7.9.

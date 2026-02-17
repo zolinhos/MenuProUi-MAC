@@ -7,6 +7,7 @@ struct SettingsView: View {
     @AppStorage("connectivity.maxConcurrency") private var maxConcurrency: Int = 12
     @AppStorage("connectivity.cacheTTLSeconds") private var cacheTTLSeconds: Double = 10.0
     @AppStorage("connectivity.urlFallbackPorts") private var urlFallbackPortsCSV: String = "443,80,8443,8080,9443"
+    @AppStorage("export.formulaProtection") private var exportFormulaProtection = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -56,6 +57,13 @@ struct SettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                }
+
+                Section("Exportação") {
+                    Toggle("Proteção contra CSV injection", isOn: $exportFormulaProtection)
+                    Text("Quando habilitado, o export pode prefixar campos perigosos (ex.: iniciando com '=' '+' '-' '@') para reduzir risco ao abrir no Excel.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section {

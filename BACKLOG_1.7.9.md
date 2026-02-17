@@ -16,6 +16,11 @@ Legenda: [ ] pendente | [x] concluído | [~] parcial
 - [x] (8) Limite de concorrência aplicado na varredura
 - [x] (59) Cache curto aplicado na varredura
 
+## Segurança / Confiabilidade de dados
+- [x] (95/96) Import com backup e rollback automático
+- [x] (101) Rotação do `eventos.csv` por tamanho
+- [x] (91/92) Export opcional com proteção contra CSV injection
+
 ## Versão / Release
 - [x] Defaults de scripts e checklist apontando para 1.7.9
 - [x] Notas de release iniciais: dist/release_notes_v1.7.9.md
