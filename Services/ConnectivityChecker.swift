@@ -76,6 +76,7 @@ enum ConnectivityChecker {
     enum ProbeMethod: String {
         case tcp = "TCP"
         case nmap = "nmap"
+        case nc = "nc"
     }
 
     enum FailureKind: String, Sendable {
@@ -262,7 +263,7 @@ enum ConnectivityChecker {
         urlFallbackPorts: [Int]
     ) async -> CheckResult {
         let start = Date()
-        let end: Date
+        var end: Date
 
         if Task.isCancelled {
             end = Date()
@@ -314,15 +315,34 @@ enum ConnectivityChecker {
                         combinedReason = nmap.failureMessage ?? "Offline"
                     }
 
+                    // Tertiary fallback: nc can succeed where NWConnection and nmap fail (macOS nsock bind issue).
+                    let ncProbe = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
+                    if ncProbe.ok {
+                        end = Date()
+                        let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
+                            ("TCP", "TCP_FAIL: \(tcpFailureSummary(tcp))"),
+                            ("NC_FALLBACK", ncProbe.output)
+                        ])
+                        return CheckResult(
+                            isOnline: true,
+                            method: .nc,
+                            effectivePort: endpoint.port,
+                            durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                            checkedAt: end,
+                            failureKind: nil,
+                            failureMessage: nil,
+                            toolOutput: toolOut
+                        )
+                    }
+
                     let npingDiag = await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
                     let pingDiag = await pingDiagnosticsIfAvailable(host: probeHost)
-                    let ncDiag = await ncDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
                     let routeDiag = await routeDiagnosticsIfAvailable(host: probeHost)
                     let scutilDiag = await scutilDiagnosticsIfAvailable(host: probeHost)
                     let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
                         ("NPING", npingDiag),
                         ("PING", pingDiag),
-                        ("NC", ncDiag)
+                        ("NC", ncProbe.output)
                         ,("ROUTE", routeDiag)
                         ,("SCUTIL", scutilDiag)
                     ])
@@ -383,34 +403,64 @@ enum ConnectivityChecker {
 
             let tcpNote = "TCP_FAIL: \(tcpFailureSummary(tcp))"
 
-            let npingOut: String? = nmap.ok ? nil : await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
-            let pingOut: String? = nmap.ok ? nil : await pingDiagnosticsIfAvailable(host: probeHost)
-            let ncOut: String? = nmap.ok ? nil : await ncDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
-            let curlOut: String? = nmap.ok ? nil : await curlDiagnosticsIfAvailable(url: row.url)
-
-            let routeOut: String? = nmap.ok ? nil : await routeDiagnosticsIfAvailable(host: probeHost)
-            let scutilOut: String? = nmap.ok ? nil : await scutilDiagnosticsIfAvailable(host: probeHost)
-
-            let attachments: [(String, String?)] = nmap.ok
-                ? [("TCP", tcpNote)]
-                : [("TCP", tcpNote), ("NPING", npingOut), ("PING", pingOut), ("NC", ncOut), ("CURL", curlOut), ("ROUTE", routeOut), ("SCUTIL", scutilOut)]
-            let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: attachments)
-
-            let combinedReason: String?
             if nmap.ok {
-                combinedReason = nil
-            } else {
-                let nmapMsg = (nmap.failureMessage ?? "nmap falhou").trimmingCharacters(in: .whitespacesAndNewlines)
-                combinedReason = "TCP: \(tcpFailureSummary(tcp)) | nmap: \(nmapMsg)"
+                let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [("TCP", tcpNote)])
+                return CheckResult(
+                    isOnline: true,
+                    method: .nmap,
+                    effectivePort: nmap.openPort ?? endpoint.port,
+                    durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                    checkedAt: end,
+                    failureKind: nil,
+                    failureMessage: nil,
+                    toolOutput: toolOut
+                )
             }
 
+            // Tertiary fallback: nc can succeed where NWConnection and nmap fail (macOS nsock bind issue).
+            let ncProbe = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
+            if ncProbe.ok {
+                end = Date()
+                let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
+                    ("TCP", tcpNote),
+                    ("NC_FALLBACK", ncProbe.output)
+                ])
+                return CheckResult(
+                    isOnline: true,
+                    method: .nc,
+                    effectivePort: endpoint.port,
+                    durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                    checkedAt: end,
+                    failureKind: nil,
+                    failureMessage: nil,
+                    toolOutput: toolOut
+                )
+            }
+
+            // All primary methods failed — collect diagnostics for logging.
+            let npingOut = await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
+            let pingOut = await pingDiagnosticsIfAvailable(host: probeHost)
+            let curlOut = await curlDiagnosticsIfAvailable(url: row.url)
+            let routeOut = await routeDiagnosticsIfAvailable(host: probeHost)
+            let scutilOut = await scutilDiagnosticsIfAvailable(host: probeHost)
+
+            let attachments: [(String, String?)] = [
+                ("TCP", tcpNote), ("NPING", npingOut), ("PING", pingOut),
+                ("NC", ncProbe.output), ("CURL", curlOut),
+                ("ROUTE", routeOut), ("SCUTIL", scutilOut)
+            ]
+            let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: attachments)
+
+            let nmapMsg = (nmap.failureMessage ?? "nmap falhou").trimmingCharacters(in: .whitespacesAndNewlines)
+            let combinedReason = "TCP: \(tcpFailureSummary(tcp)) | nmap: \(nmapMsg)"
+
             return CheckResult(
-                isOnline: nmap.ok,
+                isOnline: false,
                 method: .nmap,
                 effectivePort: nmap.openPort ?? endpoint.port,
                 durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                 checkedAt: end,
-                failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
+                failureKind: nmap.failureKind ?? .nmapFailed,
                 failureMessage: combinedReason,
                 toolOutput: toolOut
             )
@@ -820,6 +870,24 @@ enum ConnectivityChecker {
         guard let pingPath = resolvePingPath() else { return nil }
         // macOS: -c 1 (one packet), -o (exit after one reply)
         return await runGenericTool(executablePath: pingPath, args: ["-c", "1", "-o", host], timeout: 2.5)
+    }
+
+    private struct NcProbeResult: Sendable {
+        let ok: Bool
+        let output: String?
+    }
+
+    /// Quick TCP probe via /usr/bin/nc. Works even when NWConnection and nmap fail
+    /// (macOS nsock bind(0.0.0.0:0) EINVAL issue).
+    private static func checkWithNcDetailed(host: String, port: Int) async -> NcProbeResult {
+        guard let ncPath = resolveNcPath() else {
+            return .init(ok: false, output: nil)
+        }
+        let safePort = max(1, min(port, 65535))
+        let output = await runGenericTool(executablePath: ncPath, args: ["-zv", "-w", "2", host, "\(safePort)"], timeout: 2.8)
+        // nc exit 0 = connection succeeded.
+        let succeeded = output.contains("EXIT: 0")
+        return .init(ok: succeeded, output: output)
     }
 
     private static func ncDiagnosticsIfAvailable(host: String, port: Int) async -> String? {
