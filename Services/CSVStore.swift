@@ -137,6 +137,11 @@ final class CSVStore: ObservableObject {
                 try fm.copyItem(at: eventsFile, to: eventsURL)
             }
 
+            let strictResult = try validateImportedDataStrict(clientsFile: clientsURL, accessesFile: accessesURL)
+            if strictResult.hasErrors {
+                throw NSError(domain: "CSVStore", code: 1006, userInfo: [NSLocalizedDescriptionKey: "Importação bloqueada por erros de validação:\n\n\(strictResult.report)"])
+            }
+
             migrateAccessesIfNeeded()
             reload()
             pruneBackups(keep: 5)
@@ -217,11 +222,39 @@ final class CSVStore: ObservableObject {
         return .init(hasErrors: !errors.isEmpty, report: report.joined(separator: "\n"))
     }
 
+    private func validateImportedDataStrict(clientsFile: URL, accessesFile: URL) throws -> ImportPreview {
+        var errors: [String] = []
+        var warnings: [String] = []
+
+        _ = previewClients(fileURL: clientsFile, errors: &errors, warnings: &warnings, strict: true)
+        _ = previewAccesses(fileURL: accessesFile, errors: &errors, warnings: &warnings, strict: true)
+
+        var report: [String] = []
+        report.append("VALIDAÇÃO DE IMPORTAÇÃO")
+        report.append("════════════════════")
+        report.append("")
+
+        if !errors.isEmpty {
+            report.append("ERROS:")
+            for e in errors.prefix(50) { report.append("- \(e)") }
+            if errors.count > 50 { report.append("- ... (\(errors.count - 50) adicionais)") }
+            report.append("")
+        }
+
+        if !warnings.isEmpty {
+            report.append("AVISOS:")
+            for w in warnings.prefix(50) { report.append("- \(w)") }
+            if warnings.count > 50 { report.append("- ... (\(warnings.count - 50) adicionais)") }
+        }
+
+        return .init(hasErrors: !errors.isEmpty, report: report.joined(separator: "\n"))
+    }
+
     private struct PreviewCounts {
         let count: Int
     }
 
-    private func previewClients(fileURL: URL, errors: inout [String], warnings: inout [String]) -> PreviewCounts {
+    private func previewClients(fileURL: URL, errors: inout [String], warnings: inout [String], strict: Bool = false) -> PreviewCounts {
         guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
             errors.append("Não foi possível ler \(fileURL.lastPathComponent)")
             return .init(count: 0)
@@ -240,22 +273,33 @@ final class CSVStore: ObservableObject {
         var seen: Set<String> = []
         var dup = 0
         var emptyName = 0
+        var emptyId = 0
 
         for line in lines.dropFirst() {
             let c = splitCSV(line)
             let id = cell(c, at: idIdx).lowercased()
             let name = cell(c, at: nameIdx)
-            if id.isEmpty { continue }
+            if id.isEmpty { emptyId += 1; continue }
             if seen.contains(id) { dup += 1 } else { seen.insert(id) }
             if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { emptyName += 1 }
         }
 
-        if dup > 0 { warnings.append("clientes.csv possui \(dup) IDs duplicados") }
-        if emptyName > 0 { warnings.append("clientes.csv possui \(emptyName) registros com nome vazio") }
+        if emptyId > 0 {
+            if strict { errors.append("clientes.csv possui \(emptyId) registros com Id vazio") }
+            else { warnings.append("clientes.csv possui \(emptyId) registros com Id vazio") }
+        }
+        if dup > 0 {
+            if strict { errors.append("clientes.csv possui \(dup) IDs duplicados") }
+            else { warnings.append("clientes.csv possui \(dup) IDs duplicados") }
+        }
+        if emptyName > 0 {
+            if strict { errors.append("clientes.csv possui \(emptyName) registros com nome vazio") }
+            else { warnings.append("clientes.csv possui \(emptyName) registros com nome vazio") }
+        }
         return .init(count: max(0, lines.count - 1))
     }
 
-    private func previewAccesses(fileURL: URL, errors: inout [String], warnings: inout [String]) -> PreviewCounts {
+    private func previewAccesses(fileURL: URL, errors: inout [String], warnings: inout [String], strict: Bool = false) -> PreviewCounts {
         guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
             errors.append("Não foi possível ler \(fileURL.lastPathComponent)")
             return .init(count: 0)
@@ -272,33 +316,82 @@ final class CSVStore: ObservableObject {
         let clientIdIdx = findColumn(map, aliases: ["clientid", "client_id"]) ?? 1
         let kindIdx = findColumn(map, aliases: ["tipo", "type"]) ?? 2
         let aliasIdx = findColumn(map, aliases: ["apelido", "alias"]) ?? 3
+        let hostIdx = findColumn(map, aliases: ["host"]) ?? 4
+        let portIdx = findColumn(map, aliases: ["porta", "port"]) ?? 5
 
         var seenId: Set<String> = []
         var dupId = 0
         var unknownType = 0
+        var emptyId = 0
+        var emptyClientId = 0
+        var emptyAlias = 0
+        var invalidPort = 0
         var aliasDup: Set<String> = []
         var aliasSeen: Set<String> = []
 
         for line in lines.dropFirst() {
             let c = splitCSV(line)
             let id = cell(c, at: idIdx).lowercased()
-            if !id.isEmpty {
+            if id.isEmpty { emptyId += 1 } else {
                 if seenId.contains(id) { dupId += 1 } else { seenId.insert(id) }
             }
 
             let clientId = cell(c, at: clientIdIdx).lowercased()
+            if clientId.isEmpty { emptyClientId += 1 }
+
             let kindRaw = cell(c, at: kindIdx).uppercased()
             if AccessKind(rawValue: kindRaw) == nil { unknownType += 1 }
 
             let alias = cell(c, at: aliasIdx).lowercased()
+            if alias.isEmpty { emptyAlias += 1 }
             if !clientId.isEmpty, !alias.isEmpty {
                 let key = "\(clientId)|\(kindRaw)|\(alias)"
                 if aliasSeen.contains(key) { aliasDup.insert(key) } else { aliasSeen.insert(key) }
             }
+
+            let portRaw = cell(c, at: portIdx).trimmingCharacters(in: .whitespacesAndNewlines)
+            if !portRaw.isEmpty {
+                let numeric = Int(portRaw) ?? Int(portRaw.filter({ $0.isNumber }))
+                if let p = numeric {
+                    if !(1...65535).contains(p) { invalidPort += 1 }
+                } else {
+                    invalidPort += 1
+                }
+            }
+
+            let host = cell(c, at: hostIdx).trimmingCharacters(in: .whitespacesAndNewlines)
+            if host.isEmpty {
+                // for URL, host may come from Url column; keep as warning only
+                warnings.append("acessos.csv possui registros com Host vazio (pode ser esperado para URL se Url estiver preenchida)")
+                break
+            }
         }
 
-        if dupId > 0 { warnings.append("acessos.csv possui \(dupId) IDs duplicados") }
-        if unknownType > 0 { warnings.append("acessos.csv possui \(unknownType) registros com Tipo desconhecido") }
+        if emptyId > 0 {
+            if strict { errors.append("acessos.csv possui \(emptyId) registros com Id vazio") }
+            else { warnings.append("acessos.csv possui \(emptyId) registros com Id vazio") }
+        }
+        if emptyClientId > 0 {
+            if strict { errors.append("acessos.csv possui \(emptyClientId) registros com ClientId vazio") }
+            else { warnings.append("acessos.csv possui \(emptyClientId) registros com ClientId vazio") }
+        }
+        if emptyAlias > 0 {
+            if strict { errors.append("acessos.csv possui \(emptyAlias) registros com Alias vazio") }
+            else { warnings.append("acessos.csv possui \(emptyAlias) registros com Alias vazio") }
+        }
+
+        if dupId > 0 {
+            if strict { errors.append("acessos.csv possui \(dupId) IDs duplicados") }
+            else { warnings.append("acessos.csv possui \(dupId) IDs duplicados") }
+        }
+        if unknownType > 0 {
+            if strict { errors.append("acessos.csv possui \(unknownType) registros com Tipo desconhecido") }
+            else { warnings.append("acessos.csv possui \(unknownType) registros com Tipo desconhecido") }
+        }
+        if invalidPort > 0 {
+            if strict { errors.append("acessos.csv possui \(invalidPort) registros com Porta inválida") }
+            else { warnings.append("acessos.csv possui \(invalidPort) registros com Porta inválida") }
+        }
         if !aliasDup.isEmpty { warnings.append("acessos.csv possui \(aliasDup.count) conflitos de alias por cliente/tipo") }
         return .init(count: max(0, lines.count - 1))
     }

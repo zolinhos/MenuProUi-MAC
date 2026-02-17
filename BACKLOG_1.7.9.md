@@ -25,6 +25,7 @@ Legenda: [ ] pendente | [x] concluído | [~] parcial
 - [x] (108/109/110) Busca/filtros na auditoria (ação/entidade/termo)
 - [x] (94) Import dry-run (prévia/relatório) antes de aplicar
 - [x] (95) Restaurar último backup via Configurações
+- [x] (93/97/99/100) Validação mais rígida no import (bloqueia erros e faz rollback)
 
 ## Versão / Release
 - [x] Defaults de scripts e checklist apontando para 1.7.9
