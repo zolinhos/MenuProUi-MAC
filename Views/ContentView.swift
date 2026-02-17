@@ -95,6 +95,8 @@ struct ContentView: View {
         let url: String
     }
 
+    @State private var endpointConnectivityCache: [ConnectivityEndpoint: ConnectivitySnapshot] = [:]
+
     @State private var connectivityCache: [String: ConnectivitySnapshot] = [:]
     @State private var f1KeyMonitor: Any?
     @FocusState private var focusedSearchField: SearchField?
@@ -1555,34 +1557,48 @@ struct ContentView: View {
         let ttl = max(0, connectivityCacheTTLSeconds)
         let now = Date()
 
+        func endpoint(for row: AccessRow) -> ConnectivityEndpoint {
+            ConnectivityEndpoint(
+                kind: row.kind,
+                host: row.host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                port: row.port.trimmingCharacters(in: .whitespacesAndNewlines),
+                url: row.url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            )
+        }
+
         var cachedDone = 0
         var toCheck: [AccessRow] = []
         for row in rows {
             if ttl > 0, let cached = connectivityCache[row.id], now.timeIntervalSince(cached.checkedAt) <= ttl {
                 accessConnectivity[row.id] = cached.isOnline ? .online : .offline
                 cachedDone += 1
-            } else {
-                toCheck.append(row)
+                continue
             }
+
+            let ep = endpoint(for: row)
+            if ttl > 0, let cachedEP = endpointConnectivityCache[ep], now.timeIntervalSince(cachedEP.checkedAt) <= ttl {
+                accessConnectivity[row.id] = cachedEP.isOnline ? .online : .offline
+                connectivityCache[row.id] = cachedEP
+                cachedDone += 1
+                continue
+            }
+
+            toCheck.append(row)
         }
 
         // Deduplicate checks by endpoint so we don't probe the same target many times.
         var endpointToIds: [ConnectivityEndpoint: [String]] = [:]
         for row in toCheck {
-            let endpoint = ConnectivityEndpoint(
-                kind: row.kind,
-                host: row.host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
-                port: row.port.trimmingCharacters(in: .whitespacesAndNewlines),
-                url: row.url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            )
-            endpointToIds[endpoint, default: []].append(row.id)
+            endpointToIds[endpoint(for: row), default: []].append(row.id)
         }
 
         // Represent each endpoint as a single synthetic row to check.
         var endpointToIdsByKey: [String: [String]] = [:]
+        var endpointByKey: [String: ConnectivityEndpoint] = [:]
         let endpointRows: [AccessRow] = endpointToIds.map { (endpoint, ids) in
             let key = endpointKey(endpoint)
             endpointToIdsByKey[key] = ids
+            endpointByKey[key] = endpoint
             let any = toCheck.first(where: { $0.id == ids.first }) ?? toCheck[0]
             return AccessRow(
                 id: key,
@@ -1623,7 +1639,13 @@ struct ContentView: View {
                 Task { @MainActor in
                     for originalId in endpointToIdsByKey[endpointId] ?? [] {
                         accessConnectivity[originalId] = result.isOnline ? .online : .offline
-                        connectivityCache[originalId] = .init(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
+                        let snap = ConnectivitySnapshot(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
+                        connectivityCache[originalId] = snap
+                    }
+
+                    // Update endpoint cache as well.
+                    if let endpoint = endpointByKey[endpointId] {
+                        endpointConnectivityCache[endpoint] = ConnectivitySnapshot(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
                     }
                     connectivityProgressDone += 1
                     scanBannerMessage = "\(startMessage) — \(connectivityProgressDone)/\(connectivityProgressTotal)"
@@ -1647,7 +1669,9 @@ struct ContentView: View {
                     for originalId in originalIds {
                         accessConnectivity[originalId] = isOnline ? .online : .offline
                         if let result {
-                            connectivityCache[originalId] = .init(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
+                            let snap = ConnectivitySnapshot(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
+                            connectivityCache[originalId] = snap
+                            endpointConnectivityCache[endpoint] = snap
                         }
                     }
                 }
