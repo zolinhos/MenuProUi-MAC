@@ -6,7 +6,7 @@ APP_NAME="${APP_NAME:-MenuProUI-MAC}"
 APP_PATH="${APP_PATH:-dist/${APP_NAME}.app}"
 DIST_DIR="${DIST_DIR:-dist}"
 ARCH_LABEL="${ARCH_LABEL:-macos-arm64}"
-DEFAULT_VERSION="${DEFAULT_VERSION:-1.7.10}"
+DEFAULT_VERSION="${DEFAULT_VERSION:-1.8.0}"
 
 if [[ -f ".env.release" ]]; then
   # shellcheck disable=SC1091

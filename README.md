@@ -377,7 +377,7 @@ bash scripts/check_signing_setup.sh
 # 4) Gerar release notarizada
 export DEV_ID_APP_CERT="Developer ID Application: Seu Nome (TEAMID)"
 export NOTARY_PROFILE="notary-profile"
-bash scripts/release_notarized_macos.sh 1.7.9
+bash scripts/release_notarized_macos.sh 1.8.0
 ```
 
 O fluxo notarizado também executa automaticamente o preflight checklist (`scripts/release_preflight.sh`) antes de iniciar o empacotamento/notarização.
@@ -386,7 +386,7 @@ Validação final:
 
 ```bash
 spctl --assess --type execute -vvv dist/MenuProUI-MAC.app
-spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.9.dmg
+spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.8.0.dmg
 ```
 
 > Observação: os artefatos atuais são `arm64` (Apple Silicon). Em Mac Intel, é necessário gerar build `x86_64` ou universal.
@@ -396,7 +396,7 @@ spctl --assess --type open -vvv dist/MenuProUI-MAC-macos-arm64-1.7.9.dmg
 Se você não quer pagar o programa da Apple, pode distribuir com assinatura ad-hoc/local:
 
 ```bash
-bash scripts/release_untrusted_macos.sh 1.7.9
+bash scripts/release_untrusted_macos.sh 1.8.0
 ```
 
 ### Publicar release em 1 comando (tag + GitHub + upload)
@@ -404,7 +404,7 @@ bash scripts/release_untrusted_macos.sh 1.7.9
 Para facilitar próximas versões, use o orquestrador abaixo:
 
 ```bash
-bash scripts/release_publish_untrusted.sh 1.7.9
+bash scripts/release_publish_untrusted.sh 1.8.0
 ```
 
 Antes de empacotar/publicar, o script executa automaticamente um **preflight checklist**:
@@ -425,7 +425,7 @@ Ele executa automaticamente:
 Se precisar informar manualmente o repositório:
 
 ```bash
-bash scripts/release_publish_untrusted.sh 1.7.9 zolinhos/MenuProUi-MAC
+bash scripts/release_publish_untrusted.sh 1.8.0 zolinhos/MenuProUi-MAC
 ```
 
 As notas da release são lidas de `dist/release_notes_v<versão>.md`.
