@@ -7,13 +7,21 @@ enum ConnectivityChecker {
         var finished = false
     }
 
-    private static let nmapExecutablePath: String? = {
-        let candidates = ["/opt/homebrew/bin/nmap", "/usr/local/bin/nmap", "/usr/bin/nmap"]
-        return candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
-    }()
+    private static let fixedNmapCandidates = [
+        "/opt/homebrew/bin/nmap",
+        "/opt/homebrew/sbin/nmap",
+        "/usr/local/bin/nmap",
+        "/usr/local/sbin/nmap",
+        "/opt/local/bin/nmap",
+        "/usr/bin/nmap"
+    ]
 
     static var hasNmap: Bool {
-        nmapExecutablePath != nil
+        resolveNmapPath() != nil
+    }
+
+    static var nmapPathDescription: String {
+        resolveNmapPath() ?? "não encontrado"
     }
 
     static func checkAll(rows: [AccessRow], timeout: TimeInterval = 3.0) async -> [String: Bool] {
@@ -182,7 +190,7 @@ enum ConnectivityChecker {
     }
 
     private static func checkWithNmap(host: String, ports: [Int], timeout: TimeInterval) async -> Bool {
-        guard let nmapPath = nmapExecutablePath else { return false }
+        guard let nmapPath = resolveNmapPath() else { return false }
         guard !ports.isEmpty else { return false }
 
         return await withCheckedContinuation { continuation in
@@ -221,6 +229,31 @@ enum ConnectivityChecker {
                     continuation.resume(returning: false)
                 }
             }
+        }
+    }
+
+    private static func resolveNmapPath() -> String? {
+        if let fixedPath = fixedNmapCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return fixedPath
+        }
+
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["which", "nmap"]
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !output.isEmpty, FileManager.default.isExecutableFile(atPath: output) else { return nil }
+            return output
+        } catch {
+            return nil
         }
     }
 }

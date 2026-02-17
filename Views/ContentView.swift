@@ -1217,9 +1217,9 @@ struct ContentView: View {
 
         let startMessage: String
         if ConnectivityChecker.hasNmap {
-            startMessage = "Varredura iniciada em background para \(scopeName). Você pode continuar usando o app enquanto o processo executa."
+            startMessage = "Varredura iniciada em background para \(scopeName). nmap detectado em: \(ConnectivityChecker.nmapPathDescription). Você pode continuar usando o app enquanto o processo executa."
         } else {
-            startMessage = "Varredura iniciada em background para \(scopeName). nmap não encontrado: usando fallback TCP nativo, o que pode reduzir precisão em alguns cenários."
+            startMessage = "Varredura iniciada em background para \(scopeName). nmap não encontrado (detecção: \(ConnectivityChecker.nmapPathDescription)). Usando fallback TCP nativo, o que pode reduzir precisão em alguns cenários."
         }
         showInfoText(startMessage)
 

@@ -16,6 +16,7 @@ Versão MenuProUI-MAC 1.7.5
 - Varredura de conectividade executada em background para não bloquear o uso da aplicação
 - Avisos em tela para início/fim da varredura, incluindo resumo de online/offline
 - Aviso explícito quando `nmap` não está disponível, com fallback automático para checagem TCP nativa
+- Diagnóstico em runtime da detecção de `nmap` no início da varredura (exibe caminho detectado)
 - Duplo clique na linha do acesso para abrir diretamente
 - Terminologia da interface/documentação ajustada de "HTTPS" para "URL"
 - Importação/Exportação mantidos como atalhos (`⇧⌘B` / `⇧⌘I`) e ajustes no menu de contexto (clientes/acessos)
