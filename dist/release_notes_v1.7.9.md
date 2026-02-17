@@ -13,6 +13,8 @@ Versão MenuProUI-MAC 1.7.9
 - Importação com backup automático e rollback em caso de falha
 - Rotação automática do `eventos.csv` por tamanho (evita crescimento infinito)
 - Export opcional com proteção contra CSV injection (ajustável nas Configurações)
+- Auditoria com verificação de integridade (hash encadeado) do `eventos.csv`
+- Viewer de auditoria com busca e filtros por ação/entidade
 
 ## Notas
 - A versão 1.7.5 permanece congelada; toda evolução a partir daqui é direcionada para 1.7.9.

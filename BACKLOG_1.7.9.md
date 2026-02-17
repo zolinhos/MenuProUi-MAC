@@ -20,6 +20,8 @@ Legenda: [ ] pendente | [x] concluído | [~] parcial
 - [x] (95/96) Import com backup e rollback automático
 - [x] (101) Rotação do `eventos.csv` por tamanho
 - [x] (91/92) Export opcional com proteção contra CSV injection
+- [x] (103) Integridade de auditoria com hash encadeado (arquivo `.chain`)
+- [x] (108/109/110) Busca/filtros na auditoria (ação/entidade/termo)
 
 ## Versão / Release
 - [x] Defaults de scripts e checklist apontando para 1.7.9

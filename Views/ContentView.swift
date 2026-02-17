@@ -40,6 +40,14 @@ struct ContentView: View {
     @State private var showConnectivityScopeChooser = false
     @State private var showSettings = false
     @State private var auditLogText = ""
+    @State private var auditSearchText = ""
+    @State private var auditActionFilter = "Todos"
+    @State private var auditEntityFilter = "Todos"
+    @State private var auditActions: [String] = ["Todos"]
+    @State private var auditEntities: [String] = ["Todos"]
+    @State private var auditIntegrityStatus = EventLogger.IntegrityStatus.missing
+    @State private var isVerifyingAuditIntegrity = false
+    @State private var auditEvents: [AuditEvent] = []
 
     @State private var editingClient: Client?
     @State private var editingSSH: SSHServer?
@@ -962,20 +970,59 @@ struct ContentView: View {
 
     private var auditLogSheet: some View {
         NavigationStack {
-            ScrollView {
-                Text(auditLogText)
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding()
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    TextField("Buscar (ação, entidade, detalhes)...", text: $auditSearchText)
+                        .textFieldStyle(.roundedBorder)
+                    Picker("Ação", selection: $auditActionFilter) {
+                        ForEach(auditActions, id: \ .self) { Text($0).tag($0) }
+                    }
+                    .frame(width: 180)
+                    Picker("Entidade", selection: $auditEntityFilter) {
+                        ForEach(auditEntities, id: \ .self) { Text($0).tag($0) }
+                    }
+                    .frame(width: 180)
+                }
+
+                HStack {
+                    Text("Integridade: \(auditIntegrityStatus.rawValue)")
+                        .font(.caption)
+                        .foregroundStyle(auditIntegrityStatus == .ok ? .green : (auditIntegrityStatus == .missing ? .secondary : .red))
+                    Spacer()
+                    Text("Arquivo: \(store.eventosPath)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Divider()
+
+                ScrollView {
+                    Text(auditLogText)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
             }
             .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Button(isVerifyingAuditIntegrity ? "Verificando..." : "Verificar integridade") {
+                        verifyAuditIntegrity()
+                    }
+                    .disabled(isVerifyingAuditIntegrity)
+                }
                 ToolbarItem(placement: .automatic) {
                     Button("Fechar") { showAuditLog = false }
                 }
             }
             .onAppear {
-                loadAuditLogText()
+                loadAuditEvents()
+                refreshAuditPresentation()
+                verifyAuditIntegrity()
             }
+            .onChange(of: auditSearchText) { _ in refreshAuditPresentation() }
+            .onChange(of: auditActionFilter) { _ in refreshAuditPresentation() }
+            .onChange(of: auditEntityFilter) { _ in refreshAuditPresentation() }
         }
         .presentationDetents([.large])
     }
@@ -1021,7 +1068,9 @@ struct ContentView: View {
     }
 
     private func openAuditLog() {
-        loadAuditLogText()
+        loadAuditEvents()
+        refreshAuditPresentation()
+        verifyAuditIntegrity()
         store.logUIAction(action: "audit_log_opened", entityName: "Auditoria", details: "Visualização de eventos aberta")
         showAuditLog = true
     }
@@ -1044,16 +1093,31 @@ struct ContentView: View {
         self.f1KeyMonitor = nil
     }
 
-    private func loadAuditLogText() {
+    private struct AuditEvent {
+        let timestampRaw: String
+        let timestamp: Date?
+        let action: String
+        let entityType: String
+        let entityName: String
+        let details: String
+    }
+
+    private func loadAuditEvents() {
         let url = URL(fileURLWithPath: store.eventosPath)
         guard let content = try? String(contentsOf: url, encoding: .utf8) else {
             auditLogText = "LOG DE EVENTOS\n\nNenhum arquivo de eventos encontrado em:\n\(store.eventosPath)"
+            auditEvents = []
+            auditActions = ["Todos"]
+            auditEntities = ["Todos"]
             return
         }
 
         let lines = content.split(whereSeparator: \.isNewline).map(String.init)
         guard lines.count > 1 else {
             auditLogText = "LOG DE EVENTOS\n\nArquivo vazio: \(store.eventosPath)"
+            auditEvents = []
+            auditActions = ["Todos"]
+            auditEntities = ["Todos"]
             return
         }
 
@@ -1065,19 +1129,10 @@ struct ContentView: View {
         let entityNameIdx = findColumn(map, aliases: ["entityname"]) ?? 3
         let detailsIdx = findColumn(map, aliases: ["details"]) ?? 4
 
-        struct EventLine {
-            let timestampRaw: String
-            let timestamp: Date?
-            let action: String
-            let entityType: String
-            let entityName: String
-            let details: String
-        }
-
-        let events = lines.dropFirst().map { line -> EventLine in
+        let events = lines.dropFirst().map { line -> AuditEvent in
             let cells = splitCSV(line)
             let timestampRaw = cell(cells, at: tsIdx)
-            return EventLine(
+            return AuditEvent(
                 timestampRaw: timestampRaw,
                 timestamp: parseEventDate(timestampRaw),
                 action: cell(cells, at: actionIdx),
@@ -1090,7 +1145,41 @@ struct ContentView: View {
             (lhs.timestamp ?? .distantPast) > (rhs.timestamp ?? .distantPast)
         }
 
-        let recent = Array(events.prefix(120))
+        auditEvents = events
+
+        let actionSet = Set(events.map { $0.action }.filter { !$0.isEmpty })
+        auditActions = ["Todos"] + actionSet.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+
+        let entitySet = Set(events.map { $0.entityType }.filter { !$0.isEmpty })
+        auditEntities = ["Todos"] + entitySet.sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+
+        if !auditActions.contains(auditActionFilter) { auditActionFilter = "Todos" }
+        if !auditEntities.contains(auditEntityFilter) { auditEntityFilter = "Todos" }
+    }
+
+    private func refreshAuditPresentation() {
+        guard !auditEvents.isEmpty else {
+            return
+        }
+
+        let term = auditSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let filtered = auditEvents.filter { ev in
+            let matchesAction = auditActionFilter == "Todos" || ev.action.caseInsensitiveCompare(auditActionFilter) == .orderedSame
+            let matchesEntity = auditEntityFilter == "Todos" || ev.entityType.caseInsensitiveCompare(auditEntityFilter) == .orderedSame
+            let matchesTerm: Bool
+            if term.isEmpty {
+                matchesTerm = true
+            } else {
+                matchesTerm = ev.action.lowercased().contains(term)
+                    || ev.entityType.lowercased().contains(term)
+                    || ev.entityName.lowercased().contains(term)
+                    || ev.details.lowercased().contains(term)
+                    || ev.timestampRaw.lowercased().contains(term)
+            }
+            return matchesAction && matchesEntity && matchesTerm
+        }
+
+        let recent = Array(filtered.prefix(120))
         let recentOpen = Array(recent.filter { $0.action.caseInsensitiveCompare("open") == .orderedSame }.prefix(40))
 
         let outputDate = DateFormatter()
@@ -1124,17 +1213,28 @@ struct ContentView: View {
             }
         }
 
-        if recent.isEmpty && lines.count > 1 {
+        if recent.isEmpty {
             report.append("")
-            report.append("DEBUG: conteúdo bruto")
-            for raw in lines.dropFirst().prefix(20) {
-                report.append("- \(raw)")
-            }
+            report.append("(sem resultados para os filtros atuais)")
         }
 
         report.append("")
         report.append("Arquivo: \(store.eventosPath)")
         auditLogText = report.joined(separator: "\n")
+    }
+
+    private func verifyAuditIntegrity() {
+        guard !isVerifyingAuditIntegrity else { return }
+        isVerifyingAuditIntegrity = true
+
+        let eventsURL = URL(fileURLWithPath: store.eventosPath)
+        Task(priority: .utility) {
+            let status = EventLogger.verifyIntegrity(eventsURL: eventsURL)
+            await MainActor.run {
+                auditIntegrityStatus = status
+                isVerifyingAuditIntegrity = false
+            }
+        }
     }
 
     private func parseEventDate(_ value: String) -> Date? {
