@@ -359,16 +359,27 @@ enum ConnectivityChecker {
         if hasNmap {
             let nmap = await checkWithNmapDetailed(host: probeHost, ports: fallbackPorts, timeout: timeout)
             end = Date()
+
+            let tcpNote = "TCP_FAIL: \(tcpFailureSummary(tcp))"
+
             let npingOut: String? = nmap.ok ? nil : await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
             let pingOut: String? = nmap.ok ? nil : await pingDiagnosticsIfAvailable(host: probeHost)
             let ncOut: String? = nmap.ok ? nil : await ncDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
             let curlOut: String? = nmap.ok ? nil : await curlDiagnosticsIfAvailable(url: row.url)
-            let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: nmap.ok ? [] : [
-                ("NPING", npingOut),
-                ("PING", pingOut),
-                ("NC", ncOut),
-                ("CURL", curlOut)
-            ])
+
+            let attachments: [(String, String?)] = nmap.ok
+                ? [("TCP", tcpNote)]
+                : [("TCP", tcpNote), ("NPING", npingOut), ("PING", pingOut), ("NC", ncOut), ("CURL", curlOut)]
+            let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: attachments)
+
+            let combinedReason: String?
+            if nmap.ok {
+                combinedReason = nil
+            } else {
+                let nmapMsg = (nmap.failureMessage ?? "nmap falhou").trimmingCharacters(in: .whitespacesAndNewlines)
+                combinedReason = "TCP: \(tcpFailureSummary(tcp)) | nmap: \(nmapMsg)"
+            }
+
             return CheckResult(
                 isOnline: nmap.ok,
                 method: .nmap,
@@ -376,7 +387,7 @@ enum ConnectivityChecker {
                 durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                 checkedAt: end,
                 failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
-                failureMessage: nmap.ok ? nil : nmap.failureMessage,
+                failureMessage: combinedReason,
                 toolOutput: toolOut
             )
         }
@@ -635,7 +646,7 @@ enum ConnectivityChecker {
         let output: String
     }
 
-    private static func truncateToolOutput(_ text: String, limit: Int = 1200) -> String {
+    private static func truncateToolOutput(_ text: String, limit: Int = 4000) -> String {
         let cleaned = text
             .replacingOccurrences(of: "\r", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -644,6 +655,16 @@ enum ConnectivityChecker {
         }
         let idx = cleaned.index(cleaned.startIndex, offsetBy: max(0, limit))
         return String(cleaned[..<idx]) + "…"
+    }
+
+    private static func tcpFailureSummary(_ tcp: TCPProbeResult) -> String {
+        if let msg = tcp.failureMessage, !msg.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return msg
+        }
+        if let kind = tcp.failureKind {
+            return kind.rawValue
+        }
+        return "falha_tcp"
     }
 
     private static func parseOpenPortFromNmapOutput(_ text: String) -> Int? {
