@@ -27,29 +27,47 @@ enum ConnectivityChecker {
     static func checkAll(
         rows: [AccessRow],
         timeout: TimeInterval = 3.0,
+        maxConcurrency: Int = 16,
+        urlFallbackPorts: [Int] = [443, 80, 8443, 8080, 9443],
         onResult: (@Sendable (_ accessId: String, _ isOnline: Bool) -> Void)? = nil
     ) async -> [String: Bool] {
-        await withTaskGroup(of: (String, Bool).self) { group in
-            for row in rows {
+        let limit = max(1, maxConcurrency)
+
+        return await withTaskGroup(of: (String, Bool).self) { group in
+            var iterator = rows.makeIterator()
+            var inFlight = 0
+
+            func submitNext() {
+                guard !Task.isCancelled else { return }
+                guard inFlight < limit else { return }
+                guard let row = iterator.next() else { return }
+                inFlight += 1
                 group.addTask {
                     if Task.isCancelled {
                         return (row.id, false)
                     }
-                    let ok = await check(row: row, timeout: timeout)
+                    let ok = await check(row: row, timeout: timeout, urlFallbackPorts: urlFallbackPorts)
                     return (row.id, ok)
                 }
             }
 
+            for _ in 0..<min(limit, rows.count) {
+                submitNext()
+            }
+
             var results: [String: Bool] = [:]
-            for await (id, isOnline) in group {
+            while let (id, isOnline) = await group.next() {
+                inFlight = max(0, inFlight - 1)
                 results[id] = isOnline
                 onResult?(id, isOnline)
+                submitNext()
             }
+
             return results
         }
     }
 
-    static func check(row: AccessRow, timeout: TimeInterval = 3.0) async -> Bool {
+    static func check(row: AccessRow, timeout: TimeInterval = 3.0, urlFallbackPorts: [Int] = [443, 80, 8443, 8080, 9443]) async -> Bool {
         if Task.isCancelled {
             return false
         }
@@ -73,7 +91,7 @@ enum ConnectivityChecker {
             return false
         }
 
-        let fallbackPorts = fallbackPortsForURL(from: row.url, preferredPort: endpoint.port)
+        let fallbackPorts = fallbackPortsForURL(from: row.url, preferredPort: endpoint.port, extras: urlFallbackPorts)
         return await checkWithNmap(host: endpoint.host, ports: fallbackPorts, timeout: timeout)
     }
 
@@ -102,7 +120,7 @@ enum ConnectivityChecker {
         return (host, sanitizePort(rawPort, fallback: fallback))
     }
 
-    private static func fallbackPortsForURL(from raw: String, preferredPort: Int) -> [Int] {
+    private static func fallbackPortsForURL(from raw: String, preferredPort: Int, extras: [Int]) -> [Int] {
         var ports: [Int] = []
         let normalized = normalizedURLInput(raw)
         if let comps = URLComponents(string: normalized) {
@@ -110,7 +128,7 @@ enum ConnectivityChecker {
             ports.append(defaultPort(for: scheme))
         }
         ports.append(preferredPort)
-        ports.append(contentsOf: [443, 80, 8443, 8080, 9443])
+        ports.append(contentsOf: extras)
 
         var uniquePorts: [Int] = []
         for port in ports {

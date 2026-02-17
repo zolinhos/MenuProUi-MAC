@@ -19,6 +19,11 @@ struct ContentView: View {
     @StateObject private var store = CSVStore()
     @StateObject private var logs = LogParser()
 
+    @AppStorage("connectivity.timeoutSeconds") private var connectivityTimeoutSeconds: Double = 3.0
+    @AppStorage("connectivity.maxConcurrency") private var connectivityMaxConcurrency: Int = 12
+    @AppStorage("connectivity.cacheTTLSeconds") private var connectivityCacheTTLSeconds: Double = 10.0
+    @AppStorage("connectivity.urlFallbackPorts") private var urlFallbackPortsCSV: String = "443,80,8443,8080,9443"
+
     @State private var selectedClientId: String?
     @State private var selectedAccessId: String?
     @State private var globalSearchText = ""
@@ -33,6 +38,7 @@ struct ContentView: View {
     @State private var showHelp = false
     @State private var showAuditLog = false
     @State private var showConnectivityScopeChooser = false
+    @State private var showSettings = false
     @State private var auditLogText = ""
 
     @State private var editingClient: Client?
@@ -57,6 +63,7 @@ struct ContentView: View {
     @State private var connectivityProgressDone = 0
     @State private var scanBannerMessage = ""
     @State private var showScanBanner = false
+    @State private var connectivityCache: [String: (isOnline: Bool, checkedAt: Date)] = [:]
     @State private var f1KeyMonitor: Any?
     @FocusState private var focusedSearchField: SearchField?
 
@@ -235,6 +242,7 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showHelp) { helpSheet }
             .sheet(isPresented: $showAuditLog) { auditLogSheet }
+            .sheet(isPresented: $showSettings) { SettingsView() }
             .sheet(isPresented: $showAddClient) {
                 AddClientView { id, name, tags, notes in
                     do {
@@ -540,6 +548,12 @@ struct ContentView: View {
                             .buttonStyle(.bordered)
                             .keyboardShortcut(.delete, modifiers: [])
                             .disabled(selectedAccessRow == nil)
+                        Button {
+                            showSettings = true
+                        } label: {
+                            Image(systemName: "gearshape")
+                        }
+                        .buttonStyle(.bordered)
                         Spacer()
                     }
 
@@ -1257,20 +1271,48 @@ struct ContentView: View {
 
         let startMessage: String
         if ConnectivityChecker.hasNmap {
-            startMessage = "Varredura iniciada em background para \(scopeName). nmap detectado em: \(ConnectivityChecker.nmapPathDescription). Você pode continuar usando o app enquanto o processo executa."
+            startMessage = "Checando \(scopeName) em background. nmap: \(ConnectivityChecker.nmapPathDescription)"
         } else {
-            startMessage = "Varredura iniciada em background para \(scopeName). nmap não encontrado (detecção: \(ConnectivityChecker.nmapPathDescription)). Usando fallback TCP nativo, o que pode reduzir precisão em alguns cenários."
+            startMessage = "Checando \(scopeName) em background. nmap não encontrado (\(ConnectivityChecker.nmapPathDescription)) — usando TCP nativo"
         }
-        showInfoText(startMessage)
-        scanBannerMessage = "Checando \(scopeName): 0/\(rows.count)"
+
+        let ttl = max(0, connectivityCacheTTLSeconds)
+        let now = Date()
+
+        var cachedDone = 0
+        var toCheck: [AccessRow] = []
+        for row in rows {
+            if ttl > 0, let cached = connectivityCache[row.id], now.timeIntervalSince(cached.checkedAt) <= ttl {
+                accessConnectivity[row.id] = cached.isOnline ? .online : .offline
+                cachedDone += 1
+            } else {
+                toCheck.append(row)
+            }
+        }
+
+        connectivityProgressTotal = rows.count
+        connectivityProgressDone = cachedDone
+
+        scanBannerMessage = "\(startMessage) — \(connectivityProgressDone)/\(connectivityProgressTotal)"
         showScanBanner = true
 
         connectivityTask?.cancel()
         connectivityTask = Task(priority: .utility) {
-            let results = await ConnectivityChecker.checkAll(rows: rows) { _, _ in
+            let timeout = max(0.5, min(connectivityTimeoutSeconds, 60.0))
+            let concurrency = max(1, min(connectivityMaxConcurrency, 128))
+            let fallbackPorts = parsePortsCSV(urlFallbackPortsCSV, fallback: [443, 80, 8443, 8080, 9443])
+
+            let results = await ConnectivityChecker.checkAll(
+                rows: toCheck,
+                timeout: timeout,
+                maxConcurrency: concurrency,
+                urlFallbackPorts: fallbackPorts
+            ) { accessId, isOnline in
                 Task { @MainActor in
+                    accessConnectivity[accessId] = isOnline ? .online : .offline
+                    connectivityCache[accessId] = (isOnline: isOnline, checkedAt: Date())
                     connectivityProgressDone += 1
-                    scanBannerMessage = "Checando \(scopeName): \(connectivityProgressDone)/\(connectivityProgressTotal)"
+                    scanBannerMessage = "\(startMessage) — \(connectivityProgressDone)/\(connectivityProgressTotal)"
                 }
             }
 
@@ -1284,16 +1326,18 @@ struct ContentView: View {
             }
 
             await MainActor.run {
-                for row in rows {
-                    accessConnectivity[row.id] = (results[row.id] == true) ? .online : .offline
+                for row in toCheck {
+                    let isOnline = (results[row.id] == true)
+                    accessConnectivity[row.id] = isOnline ? .online : .offline
+                    connectivityCache[row.id] = (isOnline: isOnline, checkedAt: Date())
                 }
                 lastConnectivityCheck = Date()
                 isCheckingConnectivity = false
-                let onlineCount = rows.filter { results[$0.id] == true }.count
+                let onlineCount = rows.filter { connectivityState(for: $0.id) == .online }.count
                 let offlineCount = rows.count - onlineCount
-                showInfoText("Varredura concluída (\(scopeName)): \(onlineCount) online, \(offlineCount) offline.")
                 scanBannerMessage = "Concluído (\(scopeName)): \(onlineCount) online, \(offlineCount) offline."
                 showScanBanner = true
+                store.logUIAction(action: "check_connectivity_completed", entityName: "Conectividade", details: "Escopo=\(scopeName); Online=\(onlineCount); Offline=\(offlineCount)")
             }
         }
     }
@@ -1331,6 +1375,19 @@ struct ContentView: View {
         .frame(maxWidth: 900)
         .background(.ultraThinMaterial, in: Capsule())
         .shadow(radius: 6)
+    }
+
+    private func parsePortsCSV(_ raw: String, fallback: [Int]) -> [Int] {
+        let parts = raw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var ports: [Int] = []
+        for p in parts {
+            if let v = Int(p), (1...65535).contains(v), !ports.contains(v) {
+                ports.append(v)
+            }
+        }
+        return ports.isEmpty ? fallback : ports
     }
 
     private func connectivityState(for accessId: String) -> ConnectivityState {

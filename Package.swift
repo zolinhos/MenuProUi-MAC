@@ -19,6 +19,7 @@ let package = Package(
             exclude: [
                 "README.md",
                 "RELEASE_CHECKLIST.md",
+                "BACKLOG_1.7.9.md",
                 "MenuProUi-Bridging-Header.h",
                 "main.swift",
                 "dist",

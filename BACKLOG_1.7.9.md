@@ -12,6 +12,9 @@ Legenda: [ ] pendente | [x] concluído | [~] parcial
 - [x] nmap-first para SSH/RDP quando disponível
 - [x] TCP direto + fallback nmap para URL quando necessário
 - [x] Diagnóstico em runtime do caminho do nmap
+- [x] (1/2/8) Configurações: timeout, concorrência, cache e portas fallback URL
+- [x] (8) Limite de concorrência aplicado na varredura
+- [x] (59) Cache curto aplicado na varredura
 
 ## Versão / Release
 - [x] Defaults de scripts e checklist apontando para 1.7.9
