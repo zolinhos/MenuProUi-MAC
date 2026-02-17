@@ -206,15 +206,16 @@ struct ContentView: View {
         }
     }
 
+    /// Ordem de exibição ao ordenar por status: online primeiro, offline por último.
     private func connectivityOrder(_ state: ConnectivityState) -> Int {
         switch state {
-        case .offline:
+        case .online:
             return 0
         case .checking:
             return 1
         case .unknown:
             return 2
-        case .online:
+        case .offline:
             return 3
         }
     }

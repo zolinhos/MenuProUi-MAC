@@ -275,15 +275,14 @@ enum ConnectivityChecker {
             return CheckResult(isOnline: false, method: .tcp, effectivePort: 0, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .invalidTarget, failureMessage: "Destino inválido", toolOutput: nil)
         }
 
-        // For URL targets, resolve host -> IP early to keep probes consistent and avoid DNS variability.
-        // Keep the original host for UI/logging; use the resolved host for TCP/nmap/nping.
+        // Resolve host -> IP early to keep probes consistent and avoid DNS variability.
+        // Aplica para todos os tipos (SSH, RDP, URL), não apenas URL.
+        // Hosts locais (.local, mDNS) e link-local se beneficiam da resolução antecipada.
         var probeHost = endpoint.host
         var resolveNote: String? = nil
-        if row.kind == .url {
-            if let resolved = await resolveHostIfNeeded(endpoint.host), resolved != endpoint.host {
-                probeHost = resolved
-                resolveNote = "RESOLVED: host=\(endpoint.host) -> ip=\(resolved)"
-            }
+        if let resolved = await resolveHostIfNeeded(endpoint.host), resolved != endpoint.host {
+            probeHost = resolved
+            resolveNote = "RESOLVED: host=\(endpoint.host) -> ip=\(resolved)"
         }
 
         if row.kind == .ssh || row.kind == .rdp {
@@ -370,16 +369,47 @@ enum ConnectivityChecker {
                 )
             }
 
+            // Sem nmap: TCP → nc fallback (para hosts locais com bind EINVAL).
             let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
+            if tcp.ok {
+                end = Date()
+                return CheckResult(
+                    isOnline: true,
+                    method: .tcp,
+                    effectivePort: endpoint.port,
+                    durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                    checkedAt: end,
+                    failureKind: nil,
+                    failureMessage: nil,
+                    toolOutput: nil
+                )
+            }
+
+            // Fallback nc para SSH/RDP quando nmap não está instalado.
+            let ncProbe = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
+            if ncProbe.ok {
+                end = Date()
+                return CheckResult(
+                    isOnline: true,
+                    method: .nc,
+                    effectivePort: endpoint.port,
+                    durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                    checkedAt: end,
+                    failureKind: nil,
+                    failureMessage: nil,
+                    toolOutput: ncProbe.output
+                )
+            }
+
             end = Date()
             return CheckResult(
-                isOnline: tcp.ok,
+                isOnline: false,
                 method: .tcp,
                 effectivePort: endpoint.port,
                 durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                 checkedAt: end,
-                failureKind: tcp.ok ? nil : tcp.failureKind,
-                failureMessage: tcp.ok ? nil : tcp.failureMessage,
+                failureKind: tcp.failureKind,
+                failureMessage: tcp.failureMessage,
                 toolOutput: nil
             )
         }
