@@ -9,6 +9,7 @@ Versão MenuProUI-MAC 1.7.10
 - Varredura de conectividade: progresso, % + ETA aproximado, cancelamento, início/fim/duração
 - Diagnóstico: detalhe de erro (DNS/timeout/recusada/host indisponível/porta fechada) + coluna "Erro" na grid
 - nmap: detecção em runtime + botões "Revalidar" e "Testar agora" nas Configurações
+- nmap: varredura ajustada para reduzir falsos negativos (usa `-sT` e retries mais seguros)
 - URL: validação/normalização melhorada (inclui query/fragmento) + botão "Testar URL" nos diálogos (cadastro/edição)
 - Import: prévia (dry-run) + backup/rollback; validação mais rígida (inclui conflito de alias por cliente/tipo)
 - Auditoria: integridade por hash chain + viewer com busca/filtros e atalhos de filtro por cliente/acesso

@@ -501,10 +501,11 @@ enum ConnectivityChecker {
 
                 process.executableURL = URL(fileURLWithPath: nmapPath)
                 process.arguments = [
+                    "-sT",
                     "-Pn",
                     "-n",
                     "-T4",
-                    "--max-retries", "0",
+                    "--max-retries", "1",
                     "--host-timeout", "\(max(1, Int(timeout * 1000)))ms",
                     "--open",
                     "-p", ports.map(String.init).joined(separator: ","),
