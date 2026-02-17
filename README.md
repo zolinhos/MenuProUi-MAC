@@ -200,10 +200,6 @@ O app cria e mantém os arquivos em:
 Arquivos criados:
 
 - `clientes.csv`
-- `acessos.csv`
-- `eventos.csv`
-- `rdpfiles/` (pasta para arquivos `.rdp` gerados)
-
 > Importante: o CSV é **simples** (split por vírgula). Evite vírgulas dentro dos campos.
 
 ---
@@ -224,22 +220,26 @@ scma,Santa Casa,,2026-02-14 12:00:00,2026-02-14 12:00:00
 
 ---
 
-### 2) `acessos.csv`
 
-Header:
+
 ```
+
 Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,IsFavorite,OpenCount,LastOpenedAt,CriadoEm,AtualizadoEm
-```
+
 
 Exemplo SSH:
+
 ```
+
 uuid-1,scma,SSH,scma-ssh01,10.0.0.10,2222,root,,True,False,True,,,,Acesso Linux,True,3,02/17/2026 02:01:44,02/17/2026 00:56:19,02/17/2026 00:56:19
 ```
 
 Exemplo URL:
+
 ```
+
 uuid-2,scma,URL,fw-web01,,,,,True,False,True,,,http://192.168.0.10:4444,,False,1,02/17/2026 01:40:43,02/17/2026 01:40:10,02/17/2026 01:40:40
-```
+
 
 ---
 
