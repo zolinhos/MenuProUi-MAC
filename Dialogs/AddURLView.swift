@@ -1,9 +1,14 @@
 import SwiftUI
 
+// MARK: - Cadastrar URL
+/// Diálogo para cadastro de um novo acesso URL (HTTP/HTTPS/FTP).
+/// Exige preenchimento de alias e nome; URL é validada e decomposta em scheme/host/porta/path.
+/// Inclui teste de conectividade inline usando ConnectivityChecker.
 struct AddURLView: View {
     @Environment(\.dismiss) private var dismiss
 
     let clients: [Client]
+    /// Cliente pré-selecionado na lista lateral.
     let preselected: Client?
     let onSave: (URLAccess) -> Void
 

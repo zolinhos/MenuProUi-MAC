@@ -1,7 +1,12 @@
 import Foundation
 import Combine
 
+// MARK: - Parser de logs de conexão
+/// Lê eventos de conexão (arquivo `eventos.csv`) e gera pontos de dados
+/// para o gráfico de conexões por dia.
+/// Também suporta leitura de formato legado (`conexoes.log`) para retrocompatibilidade.
 final class LogParser: ObservableObject {
+    /// Pontos de dados agrupados por dia e tipo de conexão.
     @Published var points: [ConnLogPoint] = []
 
     private let eventsURL: URL
@@ -14,6 +19,7 @@ final class LogParser: ObservableObject {
         reload()
     }
 
+    /// Recarrega os dados de log do disco.
     func reload() {
         if fm.fileExists(atPath: eventsURL.path),
            let content = try? String(contentsOf: eventsURL, encoding: .utf8) {

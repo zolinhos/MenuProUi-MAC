@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - Payload de criação SSH
+/// Dados coletados pelo formulário e enviados ao CSVStore para persistência.
 struct AddSSHPayload {
     var alias: String
     var clientId: String
@@ -11,10 +13,14 @@ struct AddSSHPayload {
     var notes: String
 }
 
+// MARK: - Cadastrar SSH
+/// Diálogo para cadastro de um novo acesso SSH.
+/// Exige preenchimento de alias, nome, host e usuário.
 struct AddSSHView: View {
     @Environment(\.dismiss) private var dismiss
 
     let clients: [Client]
+    /// Cliente pré-selecionado na lista lateral (já preenchido no dropdown).
     let preselected: Client?
     let onSave: (AddSSHPayload) -> Void
 

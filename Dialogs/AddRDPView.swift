@@ -1,5 +1,7 @@
 import SwiftUI
 
+// MARK: - Payload de criação RDP
+/// Dados coletados pelo formulário e enviados ao CSVStore para persistência.
 struct AddRDPPayload {
     var alias: String
     var clientId: String
@@ -17,10 +19,14 @@ struct AddRDPPayload {
     var notes: String
 }
 
+// MARK: - Cadastrar RDP
+/// Diálogo para cadastro de um novo acesso RDP.
+/// Exige preenchimento de alias, nome, host e usuário.
 struct AddRDPView: View {
     @Environment(\.dismiss) private var dismiss
 
     let clients: [Client]
+    /// Cliente pré-selecionado na lista lateral.
     let preselected: Client?
     let onSave: (AddRDPPayload) -> Void
 

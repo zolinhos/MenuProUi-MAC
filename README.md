@@ -4,7 +4,7 @@ Aplicativo **macOS** (SwiftUI) para centralizar, organizar e abrir acessos de in
 
 - **SSH** (host, usuário e **porta digitável**)
 - **RDP** (host, usuário/domínio e **porta digitável**, com geração de `.rdp`)
-- **URL (HTTP/HTTPS)** para consoles web (Firewall, VMware, etc.), com suporte a portas customizadas
+- **URL (HTTP/HTTPS/FTP)** para consoles web (Firewall, VMware, etc.), com suporte a portas customizadas
 
 Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI/`.
 
@@ -27,11 +27,12 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
   - Abrir com 1 clique (gera `.rdp`)
   - Editar, clonar, favoritar e apagar
   - Porta customizada gravada corretamente via `server port:i:PORT`
-- **URL (HTTP/HTTPS)**
+- **URL (HTTP/HTTPS/FTP)**
   - Cadastrar URL completa (ex.: `http://firewall.voceconfia.com.br:4444`)
-  - Porta padrão por protocolo: `80` (HTTP) e `443` (HTTPS)
+  - Porta padrão por protocolo: `80` (HTTP), `443` (HTTPS), `21` (FTP)
   - Abrir no navegador padrão
   - Editar, clonar, favoritar e apagar
+  - Validação de URL em tempo real nos diálogos de cadastro e edição
 
 ### Importação/Exportação
 - Exportar `clientes.csv`, `acessos.csv` e `eventos.csv` por atalho (`⇧⌘B`)
@@ -46,10 +47,14 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
 - Botão **Checar Conectividade** por cliente (sem auto-refresh)
 - A varredura roda em background: você pode continuar abrindo/editando acessos durante o processo
 - Ao finalizar a varredura, o app exibe um aviso em tela com resumo online/offline
+- **Cadeia de fallback tripla** para sondas de porta:
+  1. **NWConnection (TCP nativo)** — probe principal via Network.framework
+  2. **nmap/nping** — fallback para portas que falham via TCP nativo (ex.: rotas link-local com `bind(0.0.0.0:0)` EINVAL no macOS)
+  3. **nc (netcat)** — fallback terciário quando nmap não está instalado
 - Para acessos URL, a checagem testa host/porta TCP da URL (com porta explícita ou padrão por esquema: `http` 80, `https` 443, `ftp` 21)
-- Para SSH/RDP, o app usa `nmap` em modo rápido/agressivo (quando disponível) para validar porta aberta
+- Para SSH/RDP, o app usa o probe mais adequado disponível
 - Para URL, se a checagem TCP direta falhar e `nmap` estiver instalado no macOS, o app faz fallback de varredura de portas web comuns (`443`, `80`, `8443`, `8080`, `9443`)
-- Se `nmap` não estiver instalado, o app avisa e usa fallback TCP nativo
+- Se `nmap` não estiver instalado, o app tenta `nc` (netcat) como fallback terciário
 - URLs sem endpoint TCP válido (ex.: caminhos locais/formatos não resolvíveis) podem retornar offline, mesmo abrindo no navegador
 - Status por acesso:
   - 🟢 online
@@ -63,6 +68,9 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
 - Lista de clientes na lateral (NavigationSplitView)
 - Ações rápidas (Adicionar / Abrir / Checar conectividade / Editar / Apagar)
 - Duplo clique na linha de acesso para abrir diretamente
+- Validação de formulário em tempo real em todos os diálogos (Add e Edit)
+- Observações (Notes) com campo multi-linha nos diálogos RDP e URL
+- Código-fonte documentado com comentários em português brasileiro
 
 ---
 
@@ -171,6 +179,7 @@ Atalhos úteis implementados na interface:
 - `⌘E` → Editar acesso selecionado
 - `⌫` → Excluir acesso selecionado
 - `⌘/` ou `F1` → Abrir Ajuda
+- `⌘.` → Favoritar/Desfavoritar acesso selecionado
 - Favoritar/Desfavoritar → botão dedicado e menu de contexto
 - No diálogo **Novo acesso**:
   - `⌘1` → Cadastrar SSH
@@ -489,6 +498,12 @@ Arquivos típicos:
 - `Services/RDPFileWriter.swift`  
   Gera `.rdp` (com porta custom) e abre via `NSWorkspace`.
 
+- `Services/ConnectivityChecker.swift`  
+  Checagem de conectividade com cadeia de fallback tripla: NWConnection → nmap → nc.
+
+- `Services/LogParser.swift`  
+  Parser de eventos de log para gráfico de conexões por dia.
+
 - `Services/URLLauncher.swift`  
   Abre URLs com esquema configurável via `NSWorkspace`.
 
@@ -507,9 +522,10 @@ Arquivos típicos:
 
 ## 🗺 Roadmap
 
-- Validação visual de host/porta/URL
 - Criptografia opcional do storage local
 - Sync opcional (ex.: iCloud Drive), se desejado
+- Suporte a Jump Server (SSH ProxyJump)
+- Tema claro opcional
 
 ---
 

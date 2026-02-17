@@ -1,17 +1,13 @@
 import Foundation
 import AppKit
 
+// MARK: - Lançador de URLs
+/// Abre URLs no navegador padrão do macOS via NSWorkspace.
+/// Suporta esquemas configuráveis (http, https, ftp, etc.) com porta customizada.
 enum URLLauncher {
-    static func openURL(raw: String) {
-        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
 
-        let candidate = value.contains("://") ? value : "http://\(value)"
-        if let url = URL(string: candidate) {
-            NSWorkspace.shared.open(url)
-        }
-    }
-
+    /// Abre uma URL com esquema, host, porta e path específicos.
+    /// Se a porta estiver fora do range válido (1-65535), usa a porta padrão do esquema.
     static func openURL(scheme: String, host: String, port: Int, path: String) {
         var comps = URLComponents()
         let normalizedScheme = scheme.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -26,20 +22,13 @@ enum URLLauncher {
         }
     }
 
-    static func openHTTPS(host: String, port: Int, path: String) {
-        openURL(scheme: "https", host: host, port: port, path: path)
-    }
-
+    /// Retorna a porta padrão para um esquema conhecido.
     private static func defaultPort(for scheme: String) -> Int {
         switch scheme {
-        case "http":
-            return 80
-        case "https":
-            return 443
-        case "ftp":
-            return 21
-        default:
-            return 80
+        case "http":  return 80
+        case "https": return 443
+        case "ftp":   return 21
+        default:      return 80
         }
     }
 }

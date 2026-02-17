@@ -290,8 +290,11 @@ struct ContentView: View {
         }
         .tint(.blue)
         .onAppear {
+            // Inicialização: seleciona o primeiro cliente e acesso se nenhum estiver selecionado,
+            // e instala o monitor de tecla F1 para abrir a ajuda.
             if selectedClientId == nil { selectedClientId = store.clients.first?.id }
             if selectedAccessId == nil { selectedAccessId = filteredRows.first?.id }
+            installF1KeyMonitorIfNeeded()
         }
         .onChange(of: selectedClientId) { _ in
             selectedAccessId = filteredRows.first?.id
@@ -304,9 +307,6 @@ struct ContentView: View {
                !store.clients.contains(where: { $0.id.caseInsensitiveCompare(selectedClientId) == .orderedSame }) {
                 self.selectedClientId = store.clients.first?.id
             }
-        }
-        .onAppear {
-            installF1KeyMonitorIfNeeded()
         }
         .onDisappear {
             removeF1KeyMonitor()
@@ -713,6 +713,7 @@ struct ContentView: View {
                             toggleFavoriteSelectedAccess()
                         }
                         .buttonStyle(.bordered)
+                        .keyboardShortcut(".", modifiers: [.command])
                         .disabled(selectedAccessRow == nil)
                         Button("Excluir", role: .destructive) { deleteSelectedAccess() }
                             .buttonStyle(.bordered)
@@ -782,6 +783,13 @@ struct ContentView: View {
                         ForEach(filteredRows) { row in
                             accessRowView(row)
                                 .tag(row.id)
+                                .contentShape(Rectangle())
+                                .onTapGesture(count: 2) {
+                                    open(row: row)
+                                }
+                                .onTapGesture(count: 1) {
+                                    selectedAccessId = row.id
+                                }
                                 .contextMenu {
                                     Button("Novo Acesso") {
                                         guard selectedClient != nil else {
@@ -799,9 +807,6 @@ struct ContentView: View {
                                     Button("Clonar") { clone(row: row) }
                                     Button("Editar") { edit(row: row) }
                                     Button("Excluir", role: .destructive) { delete(row: row) }
-                                }
-                                .onTapGesture(count: 2) {
-                                    open(row: row)
                                 }
                         }
                     }
@@ -887,12 +892,18 @@ struct ContentView: View {
         .padding(.vertical, 3)
     }
 
-    private func lastCheckedLabel(for accessId: String) -> String {
-        guard let snap = connectivityCache[accessId] else { return "-" }
+    /// Formatter estático reutilizado para evitar alocações repetidas a cada render.
+    private static let timeFormatter: DateFormatter = {
         let df = DateFormatter()
         df.locale = Locale(identifier: "pt_BR")
         df.dateFormat = "HH:mm"
-        return df.string(from: snap.checkedAt)
+        return df
+    }()
+
+    /// Retorna o horário da última checagem de conectividade no formato HH:mm.
+    private func lastCheckedLabel(for accessId: String) -> String {
+        guard let snap = connectivityCache[accessId] else { return "-" }
+        return Self.timeFormatter.string(from: snap.checkedAt)
     }
 
     private func connectivityMethodLabel(for accessId: String) -> String {

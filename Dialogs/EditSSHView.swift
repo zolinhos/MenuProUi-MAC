@@ -1,10 +1,18 @@
 import SwiftUI
 
+// MARK: - Editar SSH
+/// Diálogo para edição de um acesso SSH existente.
+/// Valida que alias, nome, host e usuário não fiquem vazios antes de permitir salvar.
 struct EditSSHView: View {
     @Environment(\.dismiss) private var dismiss
+
+    /// Servidor SSH sendo editado (cópia local mutável).
     @State var item: SSHServer
+
+    /// Callback executado ao salvar com sucesso.
     let onSave: (SSHServer) -> Void
 
+    /// Porta como texto para permitir digitação livre.
     @State private var portText: String
 
     init(item: SSHServer, onSave: @escaping (SSHServer) -> Void) {
@@ -13,12 +21,21 @@ struct EditSSHView: View {
         self._portText = State(initialValue: "\(item.port)")
     }
 
+    /// Validação: alias, nome, host e usuário obrigatórios.
+    private var isFormValid: Bool {
+        !item.alias.trimmed.isEmpty &&
+        !item.name.trimmed.isEmpty &&
+        !item.host.trimmed.isEmpty &&
+        !item.user.trimmed.isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Editar SSH").font(.title2).bold()
 
             Form {
                 TextField("Alias", text: $item.alias)
+                // ClientId — somente leitura
                 Text("Cliente: \(item.clientId)").foregroundStyle(.secondary)
 
                 TextField("Nome", text: $item.name)
@@ -26,6 +43,8 @@ struct EditSSHView: View {
                 TextField("Porta", text: $portText)
                 TextField("Usuário", text: $item.user)
                 TextField("Tags", text: $item.tags)
+
+                // Observações — campo multi-linha
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Observações")
                         .font(.caption)
@@ -44,6 +63,7 @@ struct EditSSHView: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!isFormValid)
             }
         }
         .padding()

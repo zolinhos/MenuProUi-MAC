@@ -1,19 +1,29 @@
 import Foundation
 import AppKit
 
+// MARK: - Escritor de arquivos RDP
+/// Gera arquivos `.rdp` com as configurações do servidor e abre
+/// automaticamente no cliente RDP padrão do macOS (ex: Microsoft Remote Desktop).
+/// Os arquivos são armazenados em `~/.config/MenuProUI/rdpfiles/`.
 enum RDPFileWriter {
+
+    /// Diretório onde os arquivos .rdp são gerados.
     static func rdpDir() -> URL {
         CSVStore.dataDirectoryURL.appendingPathComponent("rdpfiles", isDirectory: true)
     }
 
+    /// Garante que o diretório de arquivos .rdp exista.
     static func ensureDir() {
         try? FileManager.default.createDirectory(at: rdpDir(), withIntermediateDirectories: true)
     }
 
+    /// Caminho do arquivo .rdp para um dado alias.
     static func fileURL(alias: String) -> URL {
         rdpDir().appendingPathComponent("\(alias).rdp")
     }
 
+    /// Gera o arquivo .rdp com as configurações do servidor e abre no app padrão.
+    /// Porta fora do range válido é substituída por 3389.
     static func writeAndOpen(server: RDPServer) {
         ensureDir()
         let url = fileURL(alias: server.alias)

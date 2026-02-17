@@ -1,10 +1,19 @@
 import SwiftUI
 
+// MARK: - Editar RDP
+/// Diálogo para edição de um acesso RDP existente.
+/// Valida que alias, nome, host e usuário não fiquem vazios antes de permitir salvar.
+/// Porta, largura e altura são editadas como texto e convertidas em Int ao salvar.
 struct EditRDPView: View {
     @Environment(\.dismiss) private var dismiss
+
+    /// Servidor RDP sendo editado (cópia local mutável).
     @State var item: RDPServer
+
+    /// Callback executado ao salvar com sucesso.
     let onSave: (RDPServer) -> Void
 
+    /// Porta, largura e altura como texto para digitação livre.
     @State private var portText: String
     @State private var widthText: String
     @State private var heightText: String
@@ -17,12 +26,21 @@ struct EditRDPView: View {
         self._heightText = State(initialValue: item.height.map(String.init) ?? "")
     }
 
+    /// Validação: alias, nome, host e usuário obrigatórios.
+    private var isFormValid: Bool {
+        !item.alias.trimmed.isEmpty &&
+        !item.name.trimmed.isEmpty &&
+        !item.host.trimmed.isEmpty &&
+        !item.user.trimmed.isEmpty
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Editar RDP").font(.title2).bold()
 
             Form {
                 TextField("Alias", text: $item.alias)
+                // ClientId — somente leitura
                 Text("Cliente: \(item.clientId)").foregroundStyle(.secondary)
 
                 TextField("Nome", text: $item.name)
@@ -31,6 +49,8 @@ struct EditRDPView: View {
                 TextField("Domínio", text: $item.domain)
                 TextField("Usuário", text: $item.user)
                 TextField("Tags", text: $item.tags)
+
+                // Opções RDP
                 Toggle("Ignorar certificado", isOn: $item.ignoreCert)
                 Toggle("Tela cheia", isOn: $item.fullScreen)
                 Toggle("Resolução dinâmica", isOn: $item.dynamicResolution)
@@ -38,7 +58,15 @@ struct EditRDPView: View {
                     .disabled(item.dynamicResolution)
                 TextField("Altura", text: $heightText)
                     .disabled(item.dynamicResolution)
-                TextField("Observações", text: $item.notes)
+
+                // Observações — campo multi-linha (consistente com AddRDPView)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Observações")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $item.notes)
+                        .frame(minHeight: 90)
+                }
             }
 
             HStack {
@@ -52,9 +80,11 @@ struct EditRDPView: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(!isFormValid)
             }
         }
         .padding()
+        .frame(minWidth: 760, minHeight: 620)
         .preferredColorScheme(.dark)
     }
 }

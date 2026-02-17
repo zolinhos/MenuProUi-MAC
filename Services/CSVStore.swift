@@ -97,17 +97,14 @@ final class CSVStore: ObservableObject {
         )
     }
 
-    func logHelpOpen() {
+    /// Registra no log de auditoria a abertura do painel de ajuda.
+    func logHelpOpened() {
         logEvent(
             action: "help_open",
             entityType: "ui",
             entityName: "Ajuda",
             details: "Painel de ajuda aberto"
         )
-    }
-
-    func logHelpOpened() {
-        logHelpOpen()
     }
 
     func logUIAction(action: String, entityName: String, details: String) {

@@ -1,24 +1,39 @@
 import SwiftUI
 
+// MARK: - Editar URL
+/// Diálogo para edição de um acesso URL existente.
+/// Valida que alias e nome não fiquem vazios, além da validação de URL.
+/// A URL é parseada em scheme/host/port/path ao salvar.
 struct EditURLView: View {
     @Environment(\.dismiss) private var dismiss
+
+    /// Acesso URL sendo editado (cópia local mutável).
     @State var item: URLAccess
+
+    /// Callback executado ao salvar com sucesso.
     let onSave: (URLAccess) -> Void
 
+    /// URL completa como texto editável.
     @State private var urlText: String
 
+    // Configurações de conectividade (compartilhadas via AppStorage)
     @AppStorage("connectivity.timeoutSeconds") private var connectivityTimeoutSeconds: Double = 3.0
     @AppStorage("connectivity.urlFallbackPorts") private var urlFallbackPortsCSV: String = "443,80,8443,8080,9443"
-    @SceneStorage("session.lastTestedURL") private var lastTestedURL: String = ""
 
+    /// Chave separada do AddURLView para não misturar sessões.
+    @SceneStorage("session.editLastTestedURL") private var lastTestedURL: String = ""
+
+    /// Estado do teste de conectividade inline.
     @State private var isTestingURL = false
     @State private var urlTestResultText: String = ""
     @State private var urlTestResultIsOnline: Bool?
 
+    /// URL parseada em componentes (scheme, host, port, path).
     private var parsed: (scheme: String, host: String, port: Int, path: String) {
         parseURL(urlText.trimmed)
     }
 
+    /// Prévia da URL final formatada para exibição.
     private var finalURLPreview: String {
         let p = parsed
         guard !p.host.isEmpty else { return "" }
@@ -27,6 +42,7 @@ struct EditURLView: View {
         return "\(p.scheme)://\(p.host)\(portPart)\(p.path)"
     }
 
+    /// Retorna mensagem de erro se a URL é inválida, ou nil se está ok.
     private var urlValidationError: String? {
         let raw = urlText.trimmed
         if raw.isEmpty { return "Informe uma URL" }
@@ -36,6 +52,13 @@ struct EditURLView: View {
             return "Host ausente na URL"
         }
         return nil
+    }
+
+    /// Validação completa: alias, nome e URL válida.
+    private var isFormValid: Bool {
+        !item.alias.trimmed.isEmpty &&
+        !item.name.trimmed.isEmpty &&
+        urlValidationError == nil
     }
 
     init(item: URLAccess, onSave: @escaping (URLAccess) -> Void) {
@@ -52,11 +75,13 @@ struct EditURLView: View {
 
             Form {
                 TextField("Alias", text: $item.alias)
+                // ClientId — somente leitura
                 Text("Cliente: \(item.clientId)").foregroundStyle(.secondary)
 
                 TextField("Nome", text: $item.name)
                 TextField("URL completa", text: $urlText)
 
+                // Exibe erro de validação ou prévia da URL final
                 if let urlValidationError {
                     Text(urlValidationError)
                         .font(.caption)
@@ -75,6 +100,7 @@ struct EditURLView: View {
                         .lineLimit(2)
                 }
 
+                // Botão de teste de conectividade inline
                 HStack {
                     Button(isTestingURL ? "Testando..." : "Testar URL") {
                         testURLNow()
@@ -92,7 +118,15 @@ struct EditURLView: View {
                 }
 
                 TextField("Tags", text: $item.tags)
-                TextField("Observações", text: $item.notes)
+
+                // Observações — campo multi-linha (consistente com AddURLView)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Observações")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextEditor(text: $item.notes)
+                        .frame(minHeight: 90)
+                }
             }
 
             HStack {
@@ -108,10 +142,11 @@ struct EditURLView: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(urlValidationError != nil)
+                .disabled(!isFormValid)
             }
         }
         .padding()
+        .frame(minWidth: 760, minHeight: 560)
         .preferredColorScheme(.dark)
     }
 
