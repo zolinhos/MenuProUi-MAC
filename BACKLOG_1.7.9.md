@@ -16,6 +16,8 @@ Legenda: [ ] pendente | [x] concluído | [~] parcial
 - [x] (8) Limite de concorrência aplicado na varredura
 - [x] (59) Cache curto aplicado na varredura
 - [x] (71/72/73) Colunas de conectividade (última checagem / método / latência)
+- [x] (76) Filtro por status de conectividade na grid
+- [x] (75) Ordenação opcional por status (offline primeiro)
 
 ## Segurança / Confiabilidade de dados
 - [x] (95/96) Import com backup e rollback automático

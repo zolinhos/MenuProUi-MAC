@@ -15,6 +15,14 @@ private enum SearchField: Hashable {
     case accesses
 }
 
+private enum ConnectivityFilter: String, CaseIterable {
+    case all = "Todos"
+    case online = "Online"
+    case offline = "Offline"
+    case checking = "Checando"
+    case unknown = "Não checado"
+}
+
 struct ContentView: View {
     @StateObject private var store = CSVStore()
     @StateObject private var logs = LogParser()
@@ -29,6 +37,8 @@ struct ContentView: View {
     @State private var globalSearchText = ""
     @State private var clientsSearchText = ""
     @State private var accessesSearchText = ""
+    @State private var connectivityFilter: ConnectivityFilter = .all
+    @State private var sortByConnectivityStatus = false
 
     @State private var showAddClient = false
     @State private var showAddSSH = false
@@ -149,6 +159,55 @@ struct ContentView: View {
         }
     }
 
+    private func sortRowsWithConnectivity(_ rows: [AccessRow]) -> [AccessRow] {
+        rows.sorted { lhs, rhs in
+            let ls = connectivityState(for: lhs.id)
+            let rs = connectivityState(for: rhs.id)
+            let lo = connectivityOrder(ls)
+            let ro = connectivityOrder(rs)
+            if lo != ro { return lo < ro }
+            if lhs.isFavorite != rhs.isFavorite {
+                return lhs.isFavorite && !rhs.isFavorite
+            }
+            if lhs.clientName != rhs.clientName {
+                return lhs.clientName.localizedCaseInsensitiveCompare(rhs.clientName) == .orderedAscending
+            }
+            if lhs.kind.rawValue == rhs.kind.rawValue {
+                return lhs.alias.localizedCaseInsensitiveCompare(rhs.alias) == .orderedAscending
+            }
+            return lhs.kind.rawValue < rhs.kind.rawValue
+        }
+    }
+
+    private func connectivityOrder(_ state: ConnectivityState) -> Int {
+        switch state {
+        case .offline:
+            return 0
+        case .checking:
+            return 1
+        case .unknown:
+            return 2
+        case .online:
+            return 3
+        }
+    }
+
+    private func matchesConnectivityFilter(_ row: AccessRow) -> Bool {
+        let state = connectivityState(for: row.id)
+        switch connectivityFilter {
+        case .all:
+            return true
+        case .online:
+            return state == .online
+        case .offline:
+            return state == .offline
+        case .checking:
+            return state == .checking
+        case .unknown:
+            return state == .unknown
+        }
+    }
+
     private var filteredRows: [AccessRow] {
         let localTerm = accessesSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let globalTerm = globalSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -160,11 +219,14 @@ struct ContentView: View {
             sourceRows = allRowsForSelectedClient
         }
 
-        return sortRows(sourceRows.filter { row in
+        let filtered = sourceRows.filter { row in
             let matchesLocal = localTerm.isEmpty || rowMatches(row, term: localTerm)
             let matchesGlobal = globalTerm.isEmpty || rowMatches(row, term: globalTerm)
-            return matchesLocal && matchesGlobal
-        })
+            let matchesConn = matchesConnectivityFilter(row)
+            return matchesLocal && matchesGlobal && matchesConn
+        }
+
+        return sortByConnectivityStatus ? sortRowsWithConnectivity(filtered) : sortRows(filtered)
     }
 
     private func clientMatches(_ client: Client, term: String) -> Bool {
@@ -535,6 +597,20 @@ struct ContentView: View {
                             .focused($focusedSearchField, equals: .accesses)
                         Text("\(filteredRows.count) acessos")
                             .foregroundStyle(.secondary)
+                    }
+
+                    HStack(spacing: 10) {
+                        Picker("Filtro", selection: $connectivityFilter) {
+                            ForEach(ConnectivityFilter.allCases, id: \ .self) { item in
+                                Text(item.rawValue).tag(item)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        Toggle("Ordenar por status", isOn: $sortByConnectivityStatus)
+                            .toggleStyle(.switch)
+
+                        Spacer()
                     }
 
                     HStack(spacing: 8) {
