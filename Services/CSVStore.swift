@@ -55,7 +55,7 @@ final class CSVStore: ObservableObject {
         )
     }
 
-    private func sanitizeToolOutputForCSV(_ text: String, limit: Int = 1200) -> String {
+    private func sanitizeToolOutputForCSV(_ text: String, limit: Int = 4000) -> String {
         let collapsed = text
             .replacingOccurrences(of: "\r", with: "")
             .replacingOccurrences(of: "\n", with: "\\n")
