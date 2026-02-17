@@ -38,6 +38,15 @@ enum ConnectivityChecker {
         "/usr/bin/nmap"
     ]
 
+    private static let fixedNpingCandidates = [
+        "/opt/homebrew/bin/nping",
+        "/opt/homebrew/sbin/nping",
+        "/usr/local/bin/nping",
+        "/usr/local/sbin/nping",
+        "/opt/local/bin/nping",
+        "/usr/bin/nping"
+    ]
+
     enum ProbeMethod: String {
         case tcp = "TCP"
         case nmap = "nmap"
@@ -91,8 +100,16 @@ enum ConnectivityChecker {
         resolveNmapPath() != nil
     }
 
+    static var hasNping: Bool {
+        resolveNpingPath() != nil
+    }
+
     static var nmapPathDescription: String {
         resolveNmapPath() ?? "não encontrado"
+    }
+
+    static var npingPathDescription: String {
+        resolveNpingPath() ?? "não encontrado"
     }
 
     struct NmapTestResult: Sendable {
@@ -211,12 +228,23 @@ enum ConnectivityChecker {
             return CheckResult(isOnline: false, method: .tcp, effectivePort: 0, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .invalidTarget, failureMessage: "Destino inválido", toolOutput: nil)
         }
 
+        // For URL targets, resolve host -> IP early to keep probes consistent and avoid DNS variability.
+        // Keep the original host for UI/logging; use the resolved host for TCP/nmap/nping.
+        var probeHost = endpoint.host
+        var resolveNote: String? = nil
+        if row.kind == .url {
+            if let resolved = await resolveHostIfNeeded(endpoint.host), resolved != endpoint.host {
+                probeHost = resolved
+                resolveNote = "RESOLVED: host=\(endpoint.host) -> ip=\(resolved)"
+            }
+        }
+
         if row.kind == .ssh || row.kind == .rdp {
             if hasNmap {
-                let nmap = await checkWithNmapDetailed(host: endpoint.host, ports: [endpoint.port], timeout: timeout)
+                let nmap = await checkWithNmapDetailed(host: probeHost, ports: [endpoint.port], timeout: timeout)
                 if !nmap.ok {
                     // nmap can return false negatives depending on timing/filters; confirm with a TCP connect probe.
-                    let tcp = await checkTCPDetailed(host: endpoint.host, port: endpoint.port, timeout: timeout)
+                    let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
                     if tcp.ok {
                         end = Date()
                         return CheckResult(
@@ -240,6 +268,8 @@ enum ConnectivityChecker {
                         combinedReason = nmap.failureMessage ?? "Offline"
                     }
 
+                    let diag = await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
+                    let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, secondaryLabel: "NPING", secondary: diag)
                     return CheckResult(
                         isOnline: false,
                         method: .tcp,
@@ -248,7 +278,7 @@ enum ConnectivityChecker {
                         checkedAt: end,
                         failureKind: tcp.failureKind ?? nmap.failureKind ?? .unreachable,
                         failureMessage: combinedReason,
-                        toolOutput: nmap.output
+                        toolOutput: toolOut
                     )
                 }
                 end = Date()
@@ -260,11 +290,11 @@ enum ConnectivityChecker {
                     checkedAt: end,
                     failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
                     failureMessage: nmap.ok ? nil : nmap.failureMessage,
-                    toolOutput: nmap.output
+                    toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, secondaryLabel: nil, secondary: nil)
                 )
             }
 
-            let tcp = await checkTCPDetailed(host: endpoint.host, port: endpoint.port, timeout: timeout)
+            let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
             end = Date()
             return CheckResult(
                 isOnline: tcp.ok,
@@ -279,7 +309,7 @@ enum ConnectivityChecker {
         }
 
         // URL: try TCP first, then (optional) nmap fallback.
-        let tcp = await checkTCPDetailed(host: endpoint.host, port: endpoint.port, timeout: timeout)
+        let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
         if tcp.ok {
             end = Date()
             return CheckResult(isOnline: true, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil, toolOutput: nil)
@@ -292,8 +322,10 @@ enum ConnectivityChecker {
 
         let fallbackPorts = fallbackPortsForURL(from: row.url, preferredPort: endpoint.port, extras: urlFallbackPorts)
         if hasNmap {
-            let nmap = await checkWithNmapDetailed(host: endpoint.host, ports: fallbackPorts, timeout: timeout)
+            let nmap = await checkWithNmapDetailed(host: probeHost, ports: fallbackPorts, timeout: timeout)
             end = Date()
+            let npingOut: String? = nmap.ok ? nil : await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
+            let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, secondaryLabel: nmap.ok ? nil : "NPING", secondary: npingOut)
             return CheckResult(
                 isOnline: nmap.ok,
                 method: .nmap,
@@ -302,12 +334,89 @@ enum ConnectivityChecker {
                 checkedAt: end,
                 failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
                 failureMessage: nmap.ok ? nil : nmap.failureMessage,
-                toolOutput: nmap.output
+                toolOutput: toolOut
             )
         }
 
         end = Date()
         return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind, failureMessage: tcp.failureMessage, toolOutput: nil)
+    }
+
+    private static func mergeToolOutputs(resolveNote: String?, primary: String?, secondaryLabel: String?, secondary: String?) -> String? {
+        var parts: [String] = []
+        if let resolveNote, !resolveNote.isEmpty { parts.append(resolveNote) }
+        if let primary, !primary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { parts.append(primary) }
+        if let secondaryLabel, let secondary, !secondary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            parts.append("---\n\(secondaryLabel):\n\(secondary)")
+        }
+        if parts.isEmpty { return nil }
+        return parts.joined(separator: "\n")
+    }
+
+    private static func resolveHostIfNeeded(_ host: String) async -> String? {
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if isIPv4Address(trimmed) { return trimmed }
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                var hints = addrinfo(
+                    ai_flags: AI_ADDRCONFIG,
+                    ai_family: AF_UNSPEC,
+                    ai_socktype: SOCK_STREAM,
+                    ai_protocol: IPPROTO_TCP,
+                    ai_addrlen: 0,
+                    ai_canonname: nil,
+                    ai_addr: nil,
+                    ai_next: nil
+                )
+
+                var res: UnsafeMutablePointer<addrinfo>? = nil
+                let err = getaddrinfo(trimmed, nil, &hints, &res)
+                guard err == 0, let first = res else {
+                    if let res { freeaddrinfo(res) }
+                    continuation.resume(returning: nil)
+                    return
+                }
+
+                defer { freeaddrinfo(res) }
+
+                // Prefer IPv4.
+                var current: UnsafeMutablePointer<addrinfo>? = first
+                var ipv6Fallback: String? = nil
+                while let node = current {
+                    if let addr = node.pointee.ai_addr {
+                        if node.pointee.ai_family == AF_INET {
+                            var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                            let sin = addr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { $0.pointee }
+                            var saddr = sin.sin_addr
+                            if inet_ntop(AF_INET, &saddr, &buf, socklen_t(INET_ADDRSTRLEN)) != nil {
+                                continuation.resume(returning: String(cString: buf))
+                                return
+                            }
+                        } else if node.pointee.ai_family == AF_INET6 {
+                            var buf = [CChar](repeating: 0, count: Int(INET6_ADDRSTRLEN))
+                            let sin6 = addr.withMemoryRebound(to: sockaddr_in6.self, capacity: 1) { $0.pointee }
+                            var saddr6 = sin6.sin6_addr
+                            if inet_ntop(AF_INET6, &saddr6, &buf, socklen_t(INET6_ADDRSTRLEN)) != nil {
+                                ipv6Fallback = String(cString: buf)
+                            }
+                        }
+                    }
+                    current = node.pointee.ai_next
+                }
+
+                continuation.resume(returning: ipv6Fallback)
+            }
+        }
+    }
+
+    private static func isIPv4Address(_ text: String) -> Bool {
+        let parts = text.split(separator: ".")
+        guard parts.count == 4 else { return false }
+        for part in parts {
+            guard let n = Int(part), (0...255).contains(n) else { return false }
+        }
+        return true
     }
 
     private static func endpoint(for row: AccessRow) -> (host: String, port: Int)? {
@@ -518,17 +627,18 @@ enum ConnectivityChecker {
                 let errorPipe = Pipe()
 
                 process.executableURL = URL(fileURLWithPath: nmapPath)
-                process.arguments = [
+                let args: [String] = [
                     "-sT",
                     "-Pn",
                     "-n",
                     "-T4",
+                    "--reason",
                     "--max-retries", "1",
                     "--host-timeout", "\(max(1, Int(timeout * 1000)))ms",
-                    "--open",
                     "-p", ports.map(String.init).joined(separator: ","),
                     host
                 ]
+                process.arguments = args
                 process.standardOutput = outputPipe
                 process.standardError = errorPipe
 
@@ -541,7 +651,9 @@ enum ConnectivityChecker {
                     let output = String(data: outputData, encoding: .utf8) ?? ""
                     let errors = String(data: errorData, encoding: .utf8) ?? ""
                     let combined = (output + "\n" + errors).lowercased()
-                    let rawOut = truncateToolOutput(output + "\n" + errors)
+                    let cmdLine = ([nmapPath] + args).joined(separator: " ")
+                    let decorated = "CMD: \(cmdLine)\nEXIT: \(process.terminationStatus)\n" + output + "\n" + errors
+                    let rawOut = truncateToolOutput(decorated)
 
                     if process.terminationStatus != 0 {
                         let firstLine = (errors + "\n" + output).split(whereSeparator: \ .isNewline).map(String.init).first ?? ""
@@ -564,12 +676,137 @@ enum ConnectivityChecker {
                         return
                     }
 
-                    // With --open, closed ports may be omitted; treat as port closed.
-                    continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .portClosed, failureMessage: "Porta fechada", output: rawOut))
+                    // No open port found in output. With --reason enabled, output should include the state.
+                    if combined.contains("filtered") {
+                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .timeout, failureMessage: "Filtrado/sem resposta", output: rawOut))
+                    } else {
+                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .portClosed, failureMessage: "Porta fechada", output: rawOut))
+                    }
                 } catch {
                     continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: "Falha ao executar nmap", output: ""))
                 }
             }
+        }
+    }
+
+    private enum NpingMode: Sendable {
+        case tcpSyn
+        case tcpConnect
+        case icmp
+        case udp53
+    }
+
+    private static func npingDiagnosticsIfAvailable(host: String, port: Int) async -> String? {
+        guard hasNping else { return nil }
+        // Try TCP SYN first (may require sudo), then fallback to TCP connect (no sudo).
+        let tcpSyn = await checkWithNping(host: host, port: port, mode: .tcpSyn, timeout: 2.5)
+        if tcpSyn.ok {
+            return tcpSyn.output
+        }
+        if tcpSyn.output.lowercased().contains("root") || tcpSyn.output.lowercased().contains("privilege") {
+            let tcpConnect = await checkWithNping(host: host, port: port, mode: .tcpConnect, timeout: 2.5)
+            return [tcpSyn.output, "---\nFALLBACK: tcp-connect\n" + tcpConnect.output].joined(separator: "\n")
+        }
+
+        // Also run ICMP (may require privileges). Append if we got something.
+        let icmp = await checkWithNping(host: host, port: nil, mode: .icmp, timeout: 2.5)
+        if !icmp.output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return [tcpSyn.output, "---\nICMP\n" + icmp.output].joined(separator: "\n")
+        }
+
+        return tcpSyn.output
+    }
+
+    private struct NpingProbeResult: Sendable {
+        let ok: Bool
+        let output: String
+    }
+
+    private static func checkWithNping(host: String, port: Int?, mode: NpingMode, timeout: TimeInterval) async -> NpingProbeResult {
+        guard let npingPath = resolveNpingPath() else {
+            return .init(ok: false, output: "nping não encontrado")
+        }
+
+        let args: [String]
+        switch mode {
+        case .tcpSyn:
+            let p = max(1, min(port ?? 80, 65535))
+            args = ["--tcp", "-p", "\(p)", "--flags", "syn", host]
+        case .tcpConnect:
+            let p = max(1, min(port ?? 80, 65535))
+            args = ["--tcp-connect", "-p", "\(p)", host]
+        case .icmp:
+            args = ["--icmp", host]
+        case .udp53:
+            args = ["--udp", "-p", "53", host]
+        }
+
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                let process = Process()
+                let outPipe = Pipe()
+                let errPipe = Pipe()
+
+                process.executableURL = URL(fileURLWithPath: npingPath)
+                process.arguments = args
+                process.standardOutput = outPipe
+                process.standardError = errPipe
+
+                do {
+                    try process.run()
+
+                    let deadline = Date().addingTimeInterval(max(0.2, min(timeout, 30.0)))
+                    while process.isRunning, Date() < deadline {
+                        Thread.sleep(forTimeInterval: 0.03)
+                    }
+                    if process.isRunning {
+                        process.terminate()
+                        // brief grace period
+                        Thread.sleep(forTimeInterval: 0.05)
+                    }
+                    process.waitUntilExit()
+
+                    let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                    let stdout = String(data: outData, encoding: .utf8) ?? ""
+                    let stderr = String(data: errData, encoding: .utf8) ?? ""
+
+                    let cmdLine = ([npingPath] + args).joined(separator: " ")
+                    let decorated = "CMD: \(cmdLine)\nEXIT: \(process.terminationStatus)\n" + stdout + "\n" + stderr
+                    let trimmed = truncateToolOutput(decorated)
+
+                    let lower = (stdout + "\n" + stderr).lowercased()
+                    let ok = lower.contains("rcvd") || lower.contains("replies received: 1") || lower.contains("received: 1") || lower.contains("syn,ack")
+                    continuation.resume(returning: .init(ok: ok, output: trimmed))
+                } catch {
+                    continuation.resume(returning: .init(ok: false, output: "Falha ao executar nping: \(error.localizedDescription)"))
+                }
+            }
+        }
+    }
+
+    private static func resolveNpingPath() -> String? {
+        if let fixedPath = fixedNpingCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return fixedPath
+        }
+
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["which", "nping"]
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !output.isEmpty, FileManager.default.isExecutableFile(atPath: output) else { return nil }
+            return output
+        } catch {
+            return nil
         }
     }
 
