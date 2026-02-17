@@ -52,12 +52,23 @@ struct ContentView: View {
     @State private var isCheckingConnectivity = false
     @State private var lastConnectivityCheck: Date?
     @State private var connectivityTask: Task<Void, Never>?
+    @State private var lastConnectivityRows: [AccessRow] = []
+    @State private var connectivityProgressTotal = 0
+    @State private var connectivityProgressDone = 0
+    @State private var scanBannerMessage = ""
+    @State private var showScanBanner = false
     @State private var f1KeyMonitor: Any?
     @FocusState private var focusedSearchField: SearchField?
 
     var body: some View {
         dialogsLayer
             .overlay(shortcutActionsView.hidden())
+            .overlay(alignment: .top) {
+                if showScanBanner || isCheckingConnectivity {
+                    scanStatusBanner
+                        .padding(.top, 12)
+                }
+            }
     }
 
     private var selectedClient: Client? {
@@ -511,6 +522,11 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                         .keyboardShortcut("k", modifiers: [.command, .shift])
                         .disabled(isCheckingConnectivity || selectedClient == nil || allRowsForSelectedClient.isEmpty)
+                        Button("Cancelar") {
+                            cancelConnectivityCheck()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(!isCheckingConnectivity)
                         Button("Editar") { editSelectedAccess() }
                             .buttonStyle(.bordered)
                             .keyboardShortcut("e", modifiers: [.command])
@@ -536,6 +552,17 @@ struct ContentView: View {
                         }
                     }
 
+                    if isCheckingConnectivity {
+                        HStack(spacing: 10) {
+                            ProgressView(value: Double(connectivityProgressDone), total: Double(max(connectivityProgressTotal, 1)))
+                                .frame(maxWidth: 260)
+                            Text("\(connectivityProgressDone)/\(connectivityProgressTotal)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                        }
+                    }
+
                     accessHeader
 
                     List(selection: $selectedAccessId) {
@@ -553,6 +580,7 @@ struct ContentView: View {
                                     }
                                     Divider()
                                     Button("Abrir") { open(row: row) }
+                                    Button("Checar este acesso") { checkSingleAccessConnectivity(row: row) }
                                     Button(row.isFavorite ? "Desfavoritar" : "Favoritar") { toggleFavorite(row: row) }
                                     Button("Clonar") { clone(row: row) }
                                     Button("Editar") { edit(row: row) }
@@ -1207,10 +1235,22 @@ struct ContentView: View {
         performConnectivityCheck(rows: rows, scopeName: "todos os clientes")
     }
 
+    private func checkSingleAccessConnectivity(row: AccessRow) {
+        guard !isCheckingConnectivity else {
+            showInfoText("Já existe uma varredura de conectividade em andamento.")
+            return
+        }
+        store.logConnectivityCheck(scope: "acesso:\(row.alias)", rowCount: 1)
+        performConnectivityCheck(rows: [row], scopeName: "acesso \(row.alias)")
+    }
+
     private func performConnectivityCheck(rows: [AccessRow], scopeName: String) {
         guard !rows.isEmpty else { return }
 
         isCheckingConnectivity = true
+        lastConnectivityRows = rows
+        connectivityProgressTotal = rows.count
+        connectivityProgressDone = 0
         for row in rows {
             accessConnectivity[row.id] = .checking
         }
@@ -1222,10 +1262,27 @@ struct ContentView: View {
             startMessage = "Varredura iniciada em background para \(scopeName). nmap não encontrado (detecção: \(ConnectivityChecker.nmapPathDescription)). Usando fallback TCP nativo, o que pode reduzir precisão em alguns cenários."
         }
         showInfoText(startMessage)
+        scanBannerMessage = "Checando \(scopeName): 0/\(rows.count)"
+        showScanBanner = true
 
         connectivityTask?.cancel()
         connectivityTask = Task(priority: .utility) {
-            let results = await ConnectivityChecker.checkAll(rows: rows)
+            let results = await ConnectivityChecker.checkAll(rows: rows) { _, _ in
+                Task { @MainActor in
+                    connectivityProgressDone += 1
+                    scanBannerMessage = "Checando \(scopeName): \(connectivityProgressDone)/\(connectivityProgressTotal)"
+                }
+            }
+
+            if Task.isCancelled {
+                await MainActor.run {
+                    isCheckingConnectivity = false
+                    scanBannerMessage = "Varredura cancelada (\(scopeName))."
+                    showScanBanner = true
+                }
+                return
+            }
+
             await MainActor.run {
                 for row in rows {
                     accessConnectivity[row.id] = (results[row.id] == true) ? .online : .offline
@@ -1235,8 +1292,45 @@ struct ContentView: View {
                 let onlineCount = rows.filter { results[$0.id] == true }.count
                 let offlineCount = rows.count - onlineCount
                 showInfoText("Varredura concluída (\(scopeName)): \(onlineCount) online, \(offlineCount) offline.")
+                scanBannerMessage = "Concluído (\(scopeName)): \(onlineCount) online, \(offlineCount) offline."
+                showScanBanner = true
             }
         }
+    }
+
+    private func cancelConnectivityCheck() {
+        guard isCheckingConnectivity else { return }
+        connectivityTask?.cancel()
+        isCheckingConnectivity = false
+        for row in lastConnectivityRows where accessConnectivity[row.id] == .checking {
+            accessConnectivity[row.id] = .unknown
+        }
+        scanBannerMessage = "Varredura cancelada pelo usuário."
+        showScanBanner = true
+        store.logUIAction(action: "check_connectivity_cancelled", entityName: "Conectividade", details: "Varredura cancelada manualmente")
+    }
+
+    private var scanStatusBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: isCheckingConnectivity ? "wave.3.right.circle.fill" : "checkmark.seal.fill")
+                .foregroundStyle(isCheckingConnectivity ? .yellow : .green)
+            Text(scanBannerMessage)
+                .font(.caption)
+                .lineLimit(2)
+            Spacer(minLength: 8)
+            if !isCheckingConnectivity {
+                Button("Fechar") {
+                    showScanBanner = false
+                }
+                .buttonStyle(.borderless)
+                .font(.caption)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: 900)
+        .background(.ultraThinMaterial, in: Capsule())
+        .shadow(radius: 6)
     }
 
     private func connectivityState(for accessId: String) -> ConnectivityState {

@@ -24,10 +24,17 @@ enum ConnectivityChecker {
         resolveNmapPath() ?? "não encontrado"
     }
 
-    static func checkAll(rows: [AccessRow], timeout: TimeInterval = 3.0) async -> [String: Bool] {
+    static func checkAll(
+        rows: [AccessRow],
+        timeout: TimeInterval = 3.0,
+        onResult: (@Sendable (_ accessId: String, _ isOnline: Bool) -> Void)? = nil
+    ) async -> [String: Bool] {
         await withTaskGroup(of: (String, Bool).self) { group in
             for row in rows {
                 group.addTask {
+                    if Task.isCancelled {
+                        return (row.id, false)
+                    }
                     let ok = await check(row: row, timeout: timeout)
                     return (row.id, ok)
                 }
@@ -36,12 +43,17 @@ enum ConnectivityChecker {
             var results: [String: Bool] = [:]
             for await (id, isOnline) in group {
                 results[id] = isOnline
+                onResult?(id, isOnline)
             }
             return results
         }
     }
 
     static func check(row: AccessRow, timeout: TimeInterval = 3.0) async -> Bool {
+        if Task.isCancelled {
+            return false
+        }
+
         guard let endpoint = endpoint(for: row) else {
             return false
         }
@@ -149,6 +161,10 @@ enum ConnectivityChecker {
     }
 
     private static func checkTCP(host: String, port: Int, timeout: TimeInterval) async -> Bool {
+        if Task.isCancelled {
+            return false
+        }
+
         guard (1...65535).contains(port),
               let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
             return false
@@ -190,6 +206,10 @@ enum ConnectivityChecker {
     }
 
     private static func checkWithNmap(host: String, ports: [Int], timeout: TimeInterval) async -> Bool {
+        if Task.isCancelled {
+            return false
+        }
+
         guard let nmapPath = resolveNmapPath() else { return false }
         guard !ports.isEmpty else { return false }
 

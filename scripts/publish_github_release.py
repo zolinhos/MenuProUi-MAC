@@ -71,7 +71,7 @@ def github_request(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Create/update GitHub release and upload assets")
     parser.add_argument("owner_repo", help="owner/repo")
-    parser.add_argument("tag", help="Tag da release (ex.: v1.7.5)")
+    parser.add_argument("tag", help="Tag da release (ex.: v1.7.9)")
     parser.add_argument("--target", default="main", help="Branch/commit alvo")
     parser.add_argument("--name", default=None, help="Nome da release")
     parser.add_argument("--body", default=None, help="Texto da release")
