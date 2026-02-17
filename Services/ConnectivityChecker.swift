@@ -64,6 +64,15 @@ enum ConnectivityChecker {
         "/bin/curl"
     ]
 
+    private static let fixedRouteCandidates = [
+        "/sbin/route",
+        "/usr/sbin/route"
+    ]
+
+    private static let fixedScutilCandidates = [
+        "/usr/sbin/scutil"
+    ]
+
     enum ProbeMethod: String {
         case tcp = "TCP"
         case nmap = "nmap"
@@ -139,6 +148,14 @@ enum ConnectivityChecker {
 
     static var curlPathDescription: String {
         resolveCurlPath() ?? "não encontrado"
+    }
+
+    static var routePathDescription: String {
+        resolveRoutePath() ?? "não encontrado"
+    }
+
+    static var scutilPathDescription: String {
+        resolveScutilPath() ?? "não encontrado"
     }
 
     struct NmapTestResult: Sendable {
@@ -300,10 +317,14 @@ enum ConnectivityChecker {
                     let npingDiag = await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
                     let pingDiag = await pingDiagnosticsIfAvailable(host: probeHost)
                     let ncDiag = await ncDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
+                    let routeDiag = await routeDiagnosticsIfAvailable(host: probeHost)
+                    let scutilDiag = await scutilDiagnosticsIfAvailable(host: probeHost)
                     let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
                         ("NPING", npingDiag),
                         ("PING", pingDiag),
                         ("NC", ncDiag)
+                        ,("ROUTE", routeDiag)
+                        ,("SCUTIL", scutilDiag)
                     ])
                     return CheckResult(
                         isOnline: false,
@@ -367,9 +388,12 @@ enum ConnectivityChecker {
             let ncOut: String? = nmap.ok ? nil : await ncDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
             let curlOut: String? = nmap.ok ? nil : await curlDiagnosticsIfAvailable(url: row.url)
 
+            let routeOut: String? = nmap.ok ? nil : await routeDiagnosticsIfAvailable(host: probeHost)
+            let scutilOut: String? = nmap.ok ? nil : await scutilDiagnosticsIfAvailable(host: probeHost)
+
             let attachments: [(String, String?)] = nmap.ok
                 ? [("TCP", tcpNote)]
-                : [("TCP", tcpNote), ("NPING", npingOut), ("PING", pingOut), ("NC", ncOut), ("CURL", curlOut)]
+                : [("TCP", tcpNote), ("NPING", npingOut), ("PING", pingOut), ("NC", ncOut), ("CURL", curlOut), ("ROUTE", routeOut), ("SCUTIL", scutilOut)]
             let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: attachments)
 
             let combinedReason: String?
@@ -814,6 +838,22 @@ enum ConnectivityChecker {
         return await runGenericTool(executablePath: curlPath, args: ["-I", "--connect-timeout", "2", "--max-time", "3", "-sS", normalized], timeout: 3.3)
     }
 
+    private static func routeDiagnosticsIfAvailable(host: String) async -> String? {
+        guard let routePath = resolveRoutePath() else { return nil }
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        // macOS: route -n get <host>
+        return await runGenericTool(executablePath: routePath, args: ["-n", "get", trimmed], timeout: 2.0)
+    }
+
+    private static func scutilDiagnosticsIfAvailable(host: String) async -> String? {
+        guard let scutilPath = resolveScutilPath() else { return nil }
+        let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        // macOS: scutil -r <host>
+        return await runGenericTool(executablePath: scutilPath, args: ["-r", trimmed], timeout: 2.0)
+    }
+
     private static func runGenericTool(executablePath: String, args: [String], timeout: TimeInterval) async -> String {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
@@ -964,6 +1004,20 @@ enum ConnectivityChecker {
             return fixedPath
         }
         return resolveViaWhich("curl")
+    }
+
+    private static func resolveRoutePath() -> String? {
+        if let fixedPath = fixedRouteCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return fixedPath
+        }
+        return resolveViaWhich("route")
+    }
+
+    private static func resolveScutilPath() -> String? {
+        if let fixedPath = fixedScutilCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return fixedPath
+        }
+        return resolveViaWhich("scutil")
     }
 
     private static func resolveViaWhich(_ tool: String) -> String? {
