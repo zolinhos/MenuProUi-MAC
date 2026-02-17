@@ -1288,32 +1288,41 @@ struct ContentView: View {
     private var auditLogSheet: some View {
         NavigationStack {
             VStack(spacing: 10) {
-                HStack(spacing: 10) {
-                    TextField("Buscar (ação, entidade, detalhes)...", text: $auditSearchText)
-                        .textFieldStyle(.roundedBorder)
-                    Picker("Ação", selection: $auditActionFilter) {
-                        ForEach(auditActions, id: \ .self) { Text($0).tag($0) }
-                    }
-                    .frame(width: 180)
-                    Picker("Entidade", selection: $auditEntityFilter) {
-                        ForEach(auditEntities, id: \ .self) { Text($0).tag($0) }
-                    }
-                    .frame(width: 180)
-
-                    if let selectedClient {
-                        Button("Cliente selecionado") {
-                            auditSearchText = selectedClient.name
-                            if auditEntities.contains("client") { auditEntityFilter = "client" }
-                        }
-                        .buttonStyle(.bordered)
+                VStack(spacing: 8) {
+                    HStack(spacing: 10) {
+                        TextField("Buscar (ação, entidade, detalhes)...", text: $auditSearchText)
+                            .textFieldStyle(.roundedBorder)
+                        Spacer(minLength: 0)
                     }
 
-                    if let row = selectedAccessRow {
-                        Button("Acesso selecionado") {
-                            auditSearchText = row.alias
-                            if auditEntities.contains("access") { auditEntityFilter = "access" }
+                    HStack(spacing: 10) {
+                        Picker("Ação", selection: $auditActionFilter) {
+                            ForEach(auditActions, id: \ .self) { Text($0).tag($0) }
                         }
-                        .buttonStyle(.bordered)
+                        .frame(width: 220)
+
+                        Picker("Entidade", selection: $auditEntityFilter) {
+                            ForEach(auditEntities, id: \ .self) { Text($0).tag($0) }
+                        }
+                        .frame(width: 220)
+
+                        if let selectedClient {
+                            Button("Cliente selecionado") {
+                                auditSearchText = selectedClient.name
+                                if auditEntities.contains("client") { auditEntityFilter = "client" }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        if let row = selectedAccessRow {
+                            Button("Acesso selecionado") {
+                                auditSearchText = row.alias
+                                if auditEntities.contains("access") { auditEntityFilter = "access" }
+                            }
+                            .buttonStyle(.bordered)
+                        }
+
+                        Spacer(minLength: 0)
                     }
                 }
 
@@ -1337,6 +1346,7 @@ struct ContentView: View {
                         .padding()
                 }
             }
+            .padding(.top, 6)
             .toolbar {
                 ToolbarItem(placement: .automatic) {
                     Button(isVerifyingAuditIntegrity ? "Verificando..." : "Verificar integridade") {
@@ -1357,6 +1367,7 @@ struct ContentView: View {
             .onChange(of: auditActionFilter) { _ in refreshAuditPresentation() }
             .onChange(of: auditEntityFilter) { _ in refreshAuditPresentation() }
         }
+        .frame(minWidth: 1040, minHeight: 720)
         .presentationDetents([.large])
     }
 

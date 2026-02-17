@@ -31,6 +31,9 @@ struct SettingsView: View {
                         Text("Tempo máximo por tentativa de checagem (TCP e/ou nmap). Padrão: 3s. Intervalo: 0,5–60s. Em redes lentas, use 5–10s.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -42,6 +45,9 @@ struct SettingsView: View {
                         Text("Número máximo de checagens paralelas durante a varredura. Padrão: 12. Intervalo: 1–128. Valores altos aceleram, mas podem gerar falsos offline e pico na rede.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -53,6 +59,9 @@ struct SettingsView: View {
                         Text("Reaproveita resultados recentes para não repetir checagens em sequência. Padrão: 10s. 0 desliga o cache.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -60,6 +69,9 @@ struct SettingsView: View {
                         Text("Quando ligado, ao selecionar um acesso a checagem roda automaticamente (se não houver varredura em andamento).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -71,6 +83,9 @@ struct SettingsView: View {
                         Text("Atraso antes do auto-check disparar, para evitar checar enquanto você só está navegando na lista. Padrão: 800ms. Intervalo: 0–10.000ms.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -81,6 +96,9 @@ struct SettingsView: View {
                         Text("Lista de portas para o nmap testar quando a URL falha no TCP direto. Padrão: 443,80,8443,8080,9443. Use CSV com números (1–65535).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
@@ -89,9 +107,15 @@ struct SettingsView: View {
                         Text("Detectado: \(ConnectivityChecker.nmapPathDescription)")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                         Text("SSH/RDP usam nmap primeiro quando disponível; URL tenta TCP primeiro e usa nmap como fallback.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
 
                         HStack(spacing: 10) {
                             Button("Revalidar nmap") {
@@ -130,6 +154,9 @@ struct SettingsView: View {
                         Text("Quando habilitado, o export pode prefixar campos perigosos (ex.: iniciando com '=' '+' '-' '@') para reduzir risco ao abrir no Excel/Sheets.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
 
@@ -141,6 +168,9 @@ struct SettingsView: View {
                         Text("Restaura clientes.csv, acessos.csv e eventos.csv do snapshot mais recente criado antes de uma importação.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.leading)
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
                         Button("Restaurar último backup") {
                             onRestoreLatestBackup()
                         }
@@ -152,6 +182,9 @@ struct SettingsView: View {
                     Text("Dica: se sua rede for instável, aumente Timeout e diminua Concorrência para reduzir falsos offline.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .navigationTitle("Configurações")
@@ -161,7 +194,7 @@ struct SettingsView: View {
                 }
             }
         }
-        .frame(minWidth: 780, minHeight: 640)
+        .frame(minWidth: 920, minHeight: 720)
         .preferredColorScheme(.dark)
         .onChange(of: timeoutSeconds) { v in
             timeoutSeconds = max(0.5, min(v, 60.0))
