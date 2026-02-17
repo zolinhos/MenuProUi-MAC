@@ -47,6 +47,23 @@ enum ConnectivityChecker {
         "/usr/bin/nping"
     ]
 
+    private static let fixedPingCandidates = [
+        "/sbin/ping",
+        "/usr/sbin/ping",
+        "/bin/ping",
+        "/usr/bin/ping"
+    ]
+
+    private static let fixedNcCandidates = [
+        "/usr/bin/nc",
+        "/bin/nc"
+    ]
+
+    private static let fixedCurlCandidates = [
+        "/usr/bin/curl",
+        "/bin/curl"
+    ]
+
     enum ProbeMethod: String {
         case tcp = "TCP"
         case nmap = "nmap"
@@ -110,6 +127,18 @@ enum ConnectivityChecker {
 
     static var npingPathDescription: String {
         resolveNpingPath() ?? "não encontrado"
+    }
+
+    static var pingPathDescription: String {
+        resolvePingPath() ?? "não encontrado"
+    }
+
+    static var ncPathDescription: String {
+        resolveNcPath() ?? "não encontrado"
+    }
+
+    static var curlPathDescription: String {
+        resolveCurlPath() ?? "não encontrado"
     }
 
     struct NmapTestResult: Sendable {
@@ -268,8 +297,14 @@ enum ConnectivityChecker {
                         combinedReason = nmap.failureMessage ?? "Offline"
                     }
 
-                    let diag = await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
-                    let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, secondaryLabel: "NPING", secondary: diag)
+                    let npingDiag = await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
+                    let pingDiag = await pingDiagnosticsIfAvailable(host: probeHost)
+                    let ncDiag = await ncDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
+                    let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
+                        ("NPING", npingDiag),
+                        ("PING", pingDiag),
+                        ("NC", ncDiag)
+                    ])
                     return CheckResult(
                         isOnline: false,
                         method: .tcp,
@@ -290,7 +325,7 @@ enum ConnectivityChecker {
                     checkedAt: end,
                     failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
                     failureMessage: nmap.ok ? nil : nmap.failureMessage,
-                    toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, secondaryLabel: nil, secondary: nil)
+                    toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [])
                 )
             }
 
@@ -325,7 +360,15 @@ enum ConnectivityChecker {
             let nmap = await checkWithNmapDetailed(host: probeHost, ports: fallbackPorts, timeout: timeout)
             end = Date()
             let npingOut: String? = nmap.ok ? nil : await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
-            let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, secondaryLabel: nmap.ok ? nil : "NPING", secondary: npingOut)
+            let pingOut: String? = nmap.ok ? nil : await pingDiagnosticsIfAvailable(host: probeHost)
+            let ncOut: String? = nmap.ok ? nil : await ncDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
+            let curlOut: String? = nmap.ok ? nil : await curlDiagnosticsIfAvailable(url: row.url)
+            let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: nmap.ok ? [] : [
+                ("NPING", npingOut),
+                ("PING", pingOut),
+                ("NC", ncOut),
+                ("CURL", curlOut)
+            ])
             return CheckResult(
                 isOnline: nmap.ok,
                 method: .nmap,
@@ -342,12 +385,13 @@ enum ConnectivityChecker {
         return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind, failureMessage: tcp.failureMessage, toolOutput: nil)
     }
 
-    private static func mergeToolOutputs(resolveNote: String?, primary: String?, secondaryLabel: String?, secondary: String?) -> String? {
+    private static func mergeToolOutputs(resolveNote: String?, primary: String?, attachments: [(String, String?)]) -> String? {
         var parts: [String] = []
         if let resolveNote, !resolveNote.isEmpty { parts.append(resolveNote) }
         if let primary, !primary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { parts.append(primary) }
-        if let secondaryLabel, let secondary, !secondary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            parts.append("---\n\(secondaryLabel):\n\(secondary)")
+        for (label, content) in attachments {
+            guard let content, !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { continue }
+            parts.append("---\n\(label):\n\(content)")
         }
         if parts.isEmpty { return nil }
         return parts.joined(separator: "\n")
@@ -717,6 +761,66 @@ enum ConnectivityChecker {
         return tcpSyn.output
     }
 
+    private static func pingDiagnosticsIfAvailable(host: String) async -> String? {
+        guard let pingPath = resolvePingPath() else { return nil }
+        // macOS: -c 1 (one packet), -o (exit after one reply)
+        return await runGenericTool(executablePath: pingPath, args: ["-c", "1", "-o", host], timeout: 2.5)
+    }
+
+    private static func ncDiagnosticsIfAvailable(host: String, port: Int) async -> String? {
+        guard let ncPath = resolveNcPath() else { return nil }
+        let safePort = max(1, min(port, 65535))
+        // macOS netcat: -z (scan), -v (verbose), -w seconds (timeout)
+        return await runGenericTool(executablePath: ncPath, args: ["-zv", "-w", "2", host, "\(safePort)"], timeout: 2.8)
+    }
+
+    private static func curlDiagnosticsIfAvailable(url: String) async -> String? {
+        let raw = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return nil }
+        guard let curlPath = resolveCurlPath() else { return nil }
+        let normalized = normalizedURLInput(raw)
+        // -I: headers only, keep short timeouts.
+        return await runGenericTool(executablePath: curlPath, args: ["-I", "--connect-timeout", "2", "--max-time", "3", "-sS", normalized], timeout: 3.3)
+    }
+
+    private static func runGenericTool(executablePath: String, args: [String], timeout: TimeInterval) async -> String {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                let process = Process()
+                let outPipe = Pipe()
+                let errPipe = Pipe()
+                process.executableURL = URL(fileURLWithPath: executablePath)
+                process.arguments = args
+                process.standardOutput = outPipe
+                process.standardError = errPipe
+
+                do {
+                    try process.run()
+
+                    let deadline = Date().addingTimeInterval(max(0.2, min(timeout, 30.0)))
+                    while process.isRunning, Date() < deadline {
+                        Thread.sleep(forTimeInterval: 0.03)
+                    }
+                    if process.isRunning {
+                        process.terminate()
+                        Thread.sleep(forTimeInterval: 0.05)
+                    }
+                    process.waitUntilExit()
+
+                    let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+                    let errData = errPipe.fileHandleForReading.readDataToEndOfFile()
+                    let stdout = String(data: outData, encoding: .utf8) ?? ""
+                    let stderr = String(data: errData, encoding: .utf8) ?? ""
+                    let cmdLine = ([executablePath] + args).joined(separator: " ")
+                    let decorated = "CMD: \(cmdLine)\nEXIT: \(process.terminationStatus)\n" + stdout + "\n" + stderr
+                    continuation.resume(returning: truncateToolOutput(decorated))
+                } catch {
+                    continuation.resume(returning: truncateToolOutput("CMD: \(executablePath) \(args.joined(separator: " "))\nEXIT: -1\nFalha ao executar: \(error.localizedDescription)"))
+                }
+            }
+        }
+    }
+
     private struct NpingProbeResult: Sendable {
         let ok: Bool
         let output: String
@@ -794,6 +898,48 @@ enum ConnectivityChecker {
         let pipe = Pipe()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["which", "nping"]
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let output = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            guard !output.isEmpty, FileManager.default.isExecutableFile(atPath: output) else { return nil }
+            return output
+        } catch {
+            return nil
+        }
+    }
+
+    private static func resolvePingPath() -> String? {
+        if let fixedPath = fixedPingCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return fixedPath
+        }
+        return resolveViaWhich("ping")
+    }
+
+    private static func resolveNcPath() -> String? {
+        if let fixedPath = fixedNcCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return fixedPath
+        }
+        return resolveViaWhich("nc")
+    }
+
+    private static func resolveCurlPath() -> String? {
+        if let fixedPath = fixedCurlCandidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
+            return fixedPath
+        }
+        return resolveViaWhich("curl")
+    }
+
+    private static func resolveViaWhich(_ tool: String) -> String? {
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["which", tool]
         process.standardOutput = pipe
         process.standardError = Pipe()
 
