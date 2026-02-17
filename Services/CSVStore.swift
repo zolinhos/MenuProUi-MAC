@@ -55,6 +55,30 @@ final class CSVStore: ObservableObject {
         )
     }
 
+    func logConnectivityProbe(
+        scope: String,
+        kind: String,
+        target: String,
+        method: String,
+        effectivePort: Int,
+        durationMs: Int,
+        outcome: String,
+        reason: String,
+        replicas: Int
+    ) {
+        let safeReplicas = max(1, replicas)
+        let safeMs = max(0, durationMs)
+        let safePort = max(0, effectivePort)
+        let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        logEvent(
+            action: "check_connectivity_probe",
+            entityType: "connectivity",
+            entityName: scope,
+            details: "Tipo=\(kind); Target=\(target); Method=\(method); Port=\(safePort); ms=\(safeMs); Outcome=\(outcome); Replicas=\(safeReplicas); Reason=\(trimmedReason)"
+        )
+    }
+
     func logHelpOpened() {
         logEvent(
             action: "help_opened",

@@ -43,11 +43,47 @@ enum ConnectivityChecker {
         case nmap = "nmap"
     }
 
+    enum FailureKind: String, Sendable {
+        case dns
+        case timeout
+        case refused
+        case unreachable
+        case portClosed
+        case invalidTarget
+        case nmapAbsent
+        case nmapFailed
+        case cancelled
+    }
+
     struct CheckResult: Sendable {
         let isOnline: Bool
         let method: ProbeMethod
+        let effectivePort: Int
         let durationMs: Int
         let checkedAt: Date
+        let failureKind: FailureKind?
+        let failureMessage: String?
+
+        var errorDetail: String {
+            guard !isOnline else { return "" }
+            if let failureMessage, !failureMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return failureMessage
+            }
+            if let failureKind {
+                switch failureKind {
+                case .dns: return "Erro DNS"
+                case .timeout: return "Timeout"
+                case .refused: return "Conexão recusada (porta fechada)"
+                case .unreachable: return "Host indisponível"
+                case .portClosed: return "Porta fechada"
+                case .invalidTarget: return "Destino inválido"
+                case .nmapAbsent: return "nmap ausente"
+                case .nmapFailed: return "nmap falhou"
+                case .cancelled: return "Cancelado"
+                }
+            }
+            return "Offline"
+        }
     }
 
     static var hasNmap: Bool {
@@ -166,47 +202,71 @@ enum ConnectivityChecker {
 
         if Task.isCancelled {
             end = Date()
-            return CheckResult(isOnline: false, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+            return CheckResult(isOnline: false, method: .tcp, effectivePort: 0, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .cancelled, failureMessage: nil)
         }
 
         guard let endpoint = endpoint(for: row) else {
             end = Date()
-            return CheckResult(isOnline: false, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+            return CheckResult(isOnline: false, method: .tcp, effectivePort: 0, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .invalidTarget, failureMessage: "Destino inválido")
         }
 
         if row.kind == .ssh || row.kind == .rdp {
             if hasNmap {
-                let ok = await checkWithNmap(host: endpoint.host, ports: [endpoint.port], timeout: timeout)
+                let nmap = await checkWithNmapDetailed(host: endpoint.host, ports: [endpoint.port], timeout: timeout)
                 end = Date()
-                return CheckResult(isOnline: ok, method: .nmap, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+                return CheckResult(
+                    isOnline: nmap.ok,
+                    method: .nmap,
+                    effectivePort: nmap.openPort ?? endpoint.port,
+                    durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                    checkedAt: end,
+                    failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
+                    failureMessage: nmap.ok ? nil : nmap.failureMessage
+                )
             }
 
-            let ok = await checkTCP(host: endpoint.host, port: endpoint.port, timeout: timeout)
+            let tcp = await checkTCPDetailed(host: endpoint.host, port: endpoint.port, timeout: timeout)
             end = Date()
-            return CheckResult(isOnline: ok, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+            return CheckResult(
+                isOnline: tcp.ok,
+                method: .tcp,
+                effectivePort: endpoint.port,
+                durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                checkedAt: end,
+                failureKind: tcp.ok ? nil : tcp.failureKind,
+                failureMessage: tcp.ok ? nil : tcp.failureMessage
+            )
         }
 
         // URL: try TCP first, then (optional) nmap fallback.
-        let okTCP = await checkTCP(host: endpoint.host, port: endpoint.port, timeout: timeout)
-        if okTCP {
+        let tcp = await checkTCPDetailed(host: endpoint.host, port: endpoint.port, timeout: timeout)
+        if tcp.ok {
             end = Date()
-            return CheckResult(isOnline: true, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+            return CheckResult(isOnline: true, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil)
         }
 
         guard row.kind == .url else {
             end = Date()
-            return CheckResult(isOnline: false, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+            return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind, failureMessage: tcp.failureMessage)
         }
 
         let fallbackPorts = fallbackPortsForURL(from: row.url, preferredPort: endpoint.port, extras: urlFallbackPorts)
         if hasNmap {
-            let okNmap = await checkWithNmap(host: endpoint.host, ports: fallbackPorts, timeout: timeout)
+            let nmap = await checkWithNmapDetailed(host: endpoint.host, ports: fallbackPorts, timeout: timeout)
             end = Date()
-            return CheckResult(isOnline: okNmap, method: .nmap, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+            return CheckResult(
+                isOnline: nmap.ok,
+                method: .nmap,
+                effectivePort: nmap.openPort ?? endpoint.port,
+                durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                checkedAt: end,
+                failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
+                failureMessage: nmap.ok ? nil : nmap.failureMessage
+            )
         }
 
         end = Date()
-        return CheckResult(isOnline: false, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+        return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind, failureMessage: tcp.failureMessage)
     }
 
     private static func endpoint(for row: AccessRow) -> (host: String, port: Int)? {
@@ -292,14 +352,40 @@ enum ConnectivityChecker {
         }
     }
 
-    private static func checkTCP(host: String, port: Int, timeout: TimeInterval) async -> Bool {
+    private struct TCPProbeResult: Sendable {
+        let ok: Bool
+        let failureKind: FailureKind?
+        let failureMessage: String?
+    }
+
+    private static func classifyNWError(_ error: NWError) -> TCPProbeResult {
+        switch error {
+        case .dns(let dnsError):
+            return .init(ok: false, failureKind: .dns, failureMessage: "DNS: \(dnsError)")
+        case .posix(let code):
+            switch code {
+            case .ECONNREFUSED:
+                return .init(ok: false, failureKind: .refused, failureMessage: "Conexão recusada (porta fechada)")
+            case .ETIMEDOUT:
+                return .init(ok: false, failureKind: .timeout, failureMessage: "Timeout")
+            case .EHOSTUNREACH, .ENETUNREACH:
+                return .init(ok: false, failureKind: .unreachable, failureMessage: "Host indisponível")
+            default:
+                return .init(ok: false, failureKind: .unreachable, failureMessage: "Erro: \(code)")
+            }
+        default:
+            return .init(ok: false, failureKind: .unreachable, failureMessage: "Falha de rede")
+        }
+    }
+
+    private static func checkTCPDetailed(host: String, port: Int, timeout: TimeInterval) async -> TCPProbeResult {
         if Task.isCancelled {
-            return false
+            return .init(ok: false, failureKind: .cancelled, failureMessage: nil)
         }
 
         guard (1...65535).contains(port),
               let nwPort = NWEndpoint.Port(rawValue: UInt16(port)) else {
-            return false
+            return .init(ok: false, failureKind: .invalidTarget, failureMessage: "Porta inválida")
         }
 
         return await withCheckedContinuation { continuation in
@@ -307,7 +393,7 @@ enum ConnectivityChecker {
             let connection = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: .tcp)
             let state = ProbeState()
 
-            let complete: @Sendable (Bool) -> Void = { value in
+            let complete: @Sendable (TCPProbeResult) -> Void = { value in
                 state.lock.lock()
                 defer { state.lock.unlock() }
                 guard !state.finished else { return }
@@ -319,11 +405,11 @@ enum ConnectivityChecker {
             connection.stateUpdateHandler = { state in
                 switch state {
                 case .ready:
-                    complete(true)
-                case .failed(_):
-                    complete(false)
+                    complete(.init(ok: true, failureKind: nil, failureMessage: nil))
+                case .failed(let error):
+                    complete(classifyNWError(error))
                 case .cancelled:
-                    complete(false)
+                    complete(.init(ok: false, failureKind: .cancelled, failureMessage: nil))
                 default:
                     break
                 }
@@ -332,18 +418,45 @@ enum ConnectivityChecker {
             connection.start(queue: queue)
 
             queue.asyncAfter(deadline: .now() + timeout) {
-                complete(false)
+                complete(.init(ok: false, failureKind: .timeout, failureMessage: "Timeout"))
             }
         }
     }
 
-    private static func checkWithNmap(host: String, ports: [Int], timeout: TimeInterval) async -> Bool {
+    private struct NmapProbeResult: Sendable {
+        let ok: Bool
+        let openPort: Int?
+        let failureKind: FailureKind?
+        let failureMessage: String?
+    }
+
+    private static func parseOpenPortFromNmapOutput(_ text: String) -> Int? {
+        // Example: "443/tcp open  https"
+        let lower = text.lowercased()
+        for line in lower.split(whereSeparator: \ .isNewline) {
+            if line.contains("/tcp") && line.contains(" open") {
+                if let slash = line.firstIndex(of: "/") {
+                    let prefix = line[..<slash]
+                    if let p = Int(prefix.trimmingCharacters(in: .whitespacesAndNewlines)), (1...65535).contains(p) {
+                        return p
+                    }
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func checkWithNmapDetailed(host: String, ports: [Int], timeout: TimeInterval) async -> NmapProbeResult {
         if Task.isCancelled {
-            return false
+            return .init(ok: false, openPort: nil, failureKind: .cancelled, failureMessage: nil)
         }
 
-        guard let nmapPath = resolveNmapPath() else { return false }
-        guard !ports.isEmpty else { return false }
+        guard let nmapPath = resolveNmapPath() else {
+            return .init(ok: false, openPort: nil, failureKind: .nmapAbsent, failureMessage: "nmap ausente")
+        }
+        guard !ports.isEmpty else {
+            return .init(ok: false, openPort: nil, failureKind: .invalidTarget, failureMessage: "Portas inválidas")
+        }
 
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
@@ -375,10 +488,32 @@ enum ConnectivityChecker {
                     let errors = String(data: errorData, encoding: .utf8) ?? ""
                     let combined = (output + "\n" + errors).lowercased()
 
-                    let hasOpenTcp = combined.contains("/tcp") && combined.contains(" open")
-                    continuation.resume(returning: hasOpenTcp)
+                    if process.terminationStatus != 0 {
+                        let firstLine = (errors + "\n" + output).split(whereSeparator: \ .isNewline).map(String.init).first ?? ""
+                        let msg = firstLine.isEmpty ? "nmap falhou (exit=\(process.terminationStatus))" : firstLine
+                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: msg))
+                        return
+                    }
+
+                    if let openPort = parseOpenPortFromNmapOutput(output + "\n" + errors) {
+                        continuation.resume(returning: .init(ok: true, openPort: openPort, failureKind: nil, failureMessage: nil))
+                        return
+                    }
+
+                    if combined.contains("failed to resolve") || combined.contains("could not resolve") {
+                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .dns, failureMessage: "Erro DNS"))
+                        return
+                    }
+                    if combined.contains("host seems down") || combined.contains("0 hosts up") {
+                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .unreachable, failureMessage: "Host indisponível")
+                        )
+                        return
+                    }
+
+                    // With --open, closed ports may be omitted; treat as port closed.
+                    continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .portClosed, failureMessage: "Porta fechada"))
                 } catch {
-                    continuation.resume(returning: false)
+                    continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: "Falha ao executar nmap"))
                 }
             }
         }

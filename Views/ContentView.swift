@@ -92,7 +92,9 @@ struct ContentView: View {
         let isOnline: Bool
         let checkedAt: Date
         let method: ConnectivityChecker.ProbeMethod
+        let effectivePort: Int
         let durationMs: Int
+        let errorDetail: String
     }
 
     private struct ConnectivityEndpoint: Hashable {
@@ -150,13 +152,13 @@ struct ContentView: View {
         let clientName = store.clients.first(where: { $0.id.lowercased() == client })?.name ?? clientId
 
         let sshRows = store.ssh.filter { $0.clientId.lowercased() == client }.map {
-            AccessRow(id: $0.id, clientName: clientName, kind: .ssh, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
+            AccessRow(id: $0.id, clientId: $0.clientId, clientName: clientName, kind: .ssh, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
         }
         let rdpRows = store.rdp.filter { $0.clientId.lowercased() == client }.map {
-            AccessRow(id: $0.id, clientName: clientName, kind: .rdp, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
+            AccessRow(id: $0.id, clientId: $0.clientId, clientName: clientName, kind: .rdp, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
         }
         let urlRows = store.urls.filter { $0.clientId.lowercased() == client }.map {
-            AccessRow(id: $0.id, clientName: clientName, kind: .url, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: "", url: "\($0.scheme)://\($0.host):\($0.port)\($0.path)", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
+            AccessRow(id: $0.id, clientId: $0.clientId, clientName: clientName, kind: .url, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: "", url: "\($0.scheme)://\($0.host):\($0.port)\($0.path)", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
         }
         return sortRows(sshRows + rdpRows + urlRows)
     }
@@ -398,19 +400,29 @@ struct ContentView: View {
             }
             .sheet(item: $editingSSH) { item in
                 EditSSHView(item: item) { updated in
-                    do { try store.updateSSH(updated) } catch { showErr(error) }
+                    do {
+                        try store.updateSSH(updated)
+                        invalidateConnectivityCache(kind: .ssh, id: updated.id, host: updated.host, port: "\(updated.port)", url: "")
+                    } catch { showErr(error) }
                 }
                 .presentationDetents([.medium])
             }
             .sheet(item: $editingRDP) { item in
                 EditRDPView(item: item) { updated in
-                    do { try store.updateRDP(updated) } catch { showErr(error) }
+                    do {
+                        try store.updateRDP(updated)
+                        invalidateConnectivityCache(kind: .rdp, id: updated.id, host: updated.host, port: "\(updated.port)", url: "")
+                    } catch { showErr(error) }
                 }
                 .presentationDetents([.large])
             }
             .sheet(item: $editingURL) { item in
                 EditURLView(item: item) { updated in
-                    do { try store.updateURL(updated) } catch { showErr(error) }
+                    do {
+                        try store.updateURL(updated)
+                        let urlValue = "\(updated.scheme)://\(updated.host):\(updated.port)\(updated.path)"
+                        invalidateConnectivityCache(kind: .url, id: updated.id, host: updated.host, port: "\(updated.port)", url: urlValue)
+                    } catch { showErr(error) }
                 }
                 .presentationDetents([.large])
             }
@@ -753,6 +765,7 @@ struct ContentView: View {
                                     Divider()
                                     Button("Abrir") { open(row: row) }
                                     Button("Checar este acesso") { checkSingleAccessConnectivity(row: row) }
+                                    Button("Checar cliente deste acesso") { checkClientConnectivity(for: row) }
                                     Button(row.isFavorite ? "Desfavoritar" : "Favoritar") { toggleFavorite(row: row) }
                                     Button("Clonar") { clone(row: row) }
                                     Button("Editar") { edit(row: row) }
@@ -795,6 +808,7 @@ struct ContentView: View {
             Text("Usuário/URL").frame(maxWidth: .infinity, alignment: .leading)
             Text("Método").frame(width: 60, alignment: .leading)
             Text("ms").frame(width: 50, alignment: .trailing)
+            Text("Erro").frame(width: 180, alignment: .leading)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -834,6 +848,12 @@ struct ContentView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .frame(width: 50, alignment: .trailing)
+
+            Text(connectivityErrorLabel(for: row.id))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(width: 180, alignment: .leading)
         }
         .padding(.vertical, 3)
     }
@@ -854,6 +874,12 @@ struct ContentView: View {
     private func connectivityLatencyLabel(for accessId: String) -> String {
         guard let snap = connectivityCache[accessId] else { return "-" }
         return "\(max(0, snap.durationMs))"
+    }
+
+    private func connectivityErrorLabel(for accessId: String) -> String {
+        guard let snap = connectivityCache[accessId] else { return "-" }
+        if snap.isOnline { return "-" }
+        return snap.errorDetail.isEmpty ? "Offline" : snap.errorDetail
     }
 
     private func openSelectedAccess() {
@@ -1549,6 +1575,19 @@ struct ContentView: View {
         showError = true
     }
 
+    private func invalidateConnectivityCache(kind: AccessKind, id: String, host: String, port: String, url: String) {
+        connectivityCache.removeValue(forKey: id)
+        accessConnectivity.removeValue(forKey: id)
+
+        let endpoint = ConnectivityEndpoint(
+            kind: kind,
+            host: host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+            port: port.trimmingCharacters(in: .whitespacesAndNewlines),
+            url: url.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        )
+        endpointConnectivityCache.removeValue(forKey: endpoint)
+    }
+
     private func checkSelectedClientConnectivity() {
         let rows = allRowsForSelectedClient
         guard !rows.isEmpty else { return }
@@ -1587,6 +1626,17 @@ struct ContentView: View {
         }
         store.logConnectivityCheck(scope: "acesso:\(row.alias)", rowCount: 1)
         performConnectivityCheck(rows: [row], scopeName: "acesso \(row.alias)")
+    }
+
+    private func checkClientConnectivity(for row: AccessRow) {
+        let rows = allRows(for: row.clientId)
+        guard !rows.isEmpty else { return }
+        guard !isCheckingConnectivity else {
+            showInfoText("Já existe uma varredura de conectividade em andamento.")
+            return
+        }
+        store.logConnectivityCheck(scope: "cliente:\(row.clientName)", rowCount: rows.count)
+        performConnectivityCheck(rows: rows, scopeName: "cliente \(row.clientName)")
     }
 
     private func checkSelectedAccessConnectivity() {
@@ -1685,6 +1735,7 @@ struct ContentView: View {
             let any = toCheck.first(where: { $0.id == ids.first }) ?? toCheck[0]
             return AccessRow(
                 id: key,
+                clientId: any.clientId,
                 clientName: any.clientName,
                 kind: endpoint.kind,
                 alias: any.alias,
@@ -1720,15 +1771,51 @@ struct ContentView: View {
                 urlFallbackPorts: fallbackPorts
             ) { endpointId, result in
                 Task { @MainActor in
+                    if let endpoint = endpointByKey[endpointId], !result.isOnline {
+                        let target: String
+                        switch endpoint.kind {
+                        case .url:
+                            target = endpoint.url.isEmpty ? endpoint.host : endpoint.url
+                        case .ssh, .rdp:
+                            target = "\(endpoint.host):\(result.effectivePort)"
+                        }
+                        let replicas = (endpointToIdsByKey[endpointId] ?? []).count
+                        store.logConnectivityProbe(
+                            scope: scopeName,
+                            kind: endpoint.kind.rawValue,
+                            target: target,
+                            method: result.method.rawValue,
+                            effectivePort: result.effectivePort,
+                            durationMs: result.durationMs,
+                            outcome: "offline",
+                            reason: result.errorDetail,
+                            replicas: replicas
+                        )
+                    }
+
                     for originalId in endpointToIdsByKey[endpointId] ?? [] {
                         accessConnectivity[originalId] = result.isOnline ? .online : .offline
-                        let snap = ConnectivitySnapshot(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
+                        let snap = ConnectivitySnapshot(
+                            isOnline: result.isOnline,
+                            checkedAt: result.checkedAt,
+                            method: result.method,
+                            effectivePort: result.effectivePort,
+                            durationMs: result.durationMs,
+                            errorDetail: result.errorDetail
+                        )
                         connectivityCache[originalId] = snap
                     }
 
                     // Update endpoint cache as well.
                     if let endpoint = endpointByKey[endpointId] {
-                        endpointConnectivityCache[endpoint] = ConnectivitySnapshot(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
+                        endpointConnectivityCache[endpoint] = ConnectivitySnapshot(
+                            isOnline: result.isOnline,
+                            checkedAt: result.checkedAt,
+                            method: result.method,
+                            effectivePort: result.effectivePort,
+                            durationMs: result.durationMs,
+                            errorDetail: result.errorDetail
+                        )
                     }
                     connectivityProgressDone += 1
                     scanBannerMessage = "\(startMessage) — \(connectivityProgressDone)/\(connectivityProgressTotal)"
@@ -1756,7 +1843,14 @@ struct ContentView: View {
                     for originalId in originalIds {
                         accessConnectivity[originalId] = isOnline ? .online : .offline
                         if let result {
-                            let snap = ConnectivitySnapshot(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
+                            let snap = ConnectivitySnapshot(
+                                isOnline: result.isOnline,
+                                checkedAt: result.checkedAt,
+                                method: result.method,
+                                effectivePort: result.effectivePort,
+                                durationMs: result.durationMs,
+                                errorDetail: result.errorDetail
+                            )
                             connectivityCache[originalId] = snap
                             endpointConnectivityCache[endpoint] = snap
                         }

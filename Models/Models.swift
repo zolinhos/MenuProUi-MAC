@@ -157,6 +157,7 @@ struct ConnLogPoint: Identifiable, Hashable, Sendable {
 
 struct AccessRow: Identifiable, Sendable {
     let id: String
+    let clientId: String
     let clientName: String
     let kind: AccessKind
     let alias: String

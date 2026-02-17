@@ -35,16 +35,16 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 
 ## Erros / Diagnóstico (conectividade)
 - [~] Notificação de erro com causa técnica resumida.
-- [ ] Diferenciar erro DNS, timeout, conexão recusada.
-- [ ] Diferenciar “porta fechada” de “host indisponível”.
-- [~] Diferenciar “nmap ausente” de “nmap falhou”.
+- [x] Diferenciar erro DNS, timeout, conexão recusada.
+- [x] Diferenciar “porta fechada” de “host indisponível”.
+- [x] Diferenciar “nmap ausente” de “nmap falhou”.
 
 ## Logs (conectividade)
-- [ ] Registrar motivo detalhado por falha no log.
+- [x] Registrar motivo detalhado por falha no log.
 - [x] Incluir “origem da checagem” (cliente/todos) no log.
-- [ ] Incluir duração por host no log de conectividade.
-- [ ] Incluir ferramenta usada (TCP/nmap) no log.
-- [ ] Incluir porta efetiva usada no log.
+- [x] Incluir duração por host no log de conectividade.
+- [x] Incluir ferramenta usada (TCP/nmap) no log.
+- [x] Incluir porta efetiva usada no log.
 
 ## URL — validação/normalização
 - [~] Validar URL robustamente (esquema/host/porta/path).
@@ -98,7 +98,7 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [x] Adicionar coluna “Última checagem”.
 - [x] Adicionar coluna “Latência”.
 - [x] Adicionar coluna “Método” (TCP/nmap).
-- [ ] Adicionar coluna “Detalhe de erro”.
+- [x] Adicionar coluna “Detalhe de erro”.
 - [x] Ordenar acessos por estado de conectividade.
 - [x] Filtrar por estado (online/offline/checando).
 - [ ] Filtrar por “checado nas últimas X horas”.
@@ -112,7 +112,7 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [ ] Atalho para repetir última varredura.
 - [ ] Atalho para alternar modo rápido/completo.
 - [x] Context menu: “Checar somente este acesso”.
-- [ ] Context menu: “Checar cliente deste acesso”.
+- [x] Context menu: “Checar cliente deste acesso”.
 - [ ] Context menu: “Copiar diagnóstico”.
 - [ ] Context menu: “Abrir no navegador/cliente” mantendo foco.
 - [ ] Duplo clique com debounce para evitar abertura dupla.
