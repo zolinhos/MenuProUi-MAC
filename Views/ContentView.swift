@@ -784,12 +784,12 @@ struct ContentView: View {
                             accessRowView(row)
                                 .tag(row.id)
                                 .contentShape(Rectangle())
-                                .onTapGesture(count: 2) {
-                                    open(row: row)
-                                }
-                                .onTapGesture(count: 1) {
-                                    selectedAccessId = row.id
-                                }
+                                // Duplo clique abre o acesso; usa simultaneousGesture
+                                // para não bloquear a seleção nativa do List.
+                                .simultaneousGesture(
+                                    TapGesture(count: 2)
+                                        .onEnded { open(row: row) }
+                                )
                                 .contextMenu {
                                     Button("Novo Acesso") {
                                         guard selectedClient != nil else {
