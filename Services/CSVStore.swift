@@ -55,6 +55,18 @@ final class CSVStore: ObservableObject {
         )
     }
 
+    private func sanitizeToolOutputForCSV(_ text: String, limit: Int = 1200) -> String {
+        let collapsed = text
+            .replacingOccurrences(of: "\r", with: "")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if collapsed.count <= limit {
+            return collapsed
+        }
+        let idx = collapsed.index(collapsed.startIndex, offsetBy: max(0, limit))
+        return String(collapsed[..<idx]) + "…"
+    }
+
     func logConnectivityProbe(
         scope: String,
         kind: String,
@@ -64,28 +76,38 @@ final class CSVStore: ObservableObject {
         durationMs: Int,
         outcome: String,
         reason: String,
-        replicas: Int
+        replicas: Int,
+        toolOutput: String? = nil
     ) {
         let safeReplicas = max(1, replicas)
         let safeMs = max(0, durationMs)
         let safePort = max(0, effectivePort)
         let trimmedReason = reason.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        var toolPart = ""
+        if let toolOutput, !toolOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            toolPart = "; ToolOut=\(sanitizeToolOutputForCSV(toolOutput))"
+        }
+
         logEvent(
             action: "check_connectivity_probe",
             entityType: "connectivity",
             entityName: scope,
-            details: "Tipo=\(kind); Target=\(target); Method=\(method); Port=\(safePort); ms=\(safeMs); Outcome=\(outcome); Replicas=\(safeReplicas); Reason=\(trimmedReason)"
+            details: "Tipo=\(kind); Target=\(target); Method=\(method); Port=\(safePort); ms=\(safeMs); Outcome=\(outcome); Replicas=\(safeReplicas); Reason=\(trimmedReason)\(toolPart)"
         )
     }
 
-    func logHelpOpened() {
+    func logHelpOpen() {
         logEvent(
-            action: "help_opened",
+            action: "help_open",
             entityType: "ui",
             entityName: "Ajuda",
             details: "Painel de ajuda aberto"
         )
+    }
+
+    func logHelpOpened() {
+        logHelpOpen()
     }
 
     func logUIAction(action: String, entityName: String, details: String) {

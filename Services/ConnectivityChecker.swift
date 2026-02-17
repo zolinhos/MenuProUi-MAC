@@ -63,6 +63,7 @@ enum ConnectivityChecker {
         let checkedAt: Date
         let failureKind: FailureKind?
         let failureMessage: String?
+        let toolOutput: String?
 
         var errorDetail: String {
             guard !isOnline else { return "" }
@@ -202,12 +203,12 @@ enum ConnectivityChecker {
 
         if Task.isCancelled {
             end = Date()
-            return CheckResult(isOnline: false, method: .tcp, effectivePort: 0, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .cancelled, failureMessage: nil)
+            return CheckResult(isOnline: false, method: .tcp, effectivePort: 0, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .cancelled, failureMessage: nil, toolOutput: nil)
         }
 
         guard let endpoint = endpoint(for: row) else {
             end = Date()
-            return CheckResult(isOnline: false, method: .tcp, effectivePort: 0, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .invalidTarget, failureMessage: "Destino inválido")
+            return CheckResult(isOnline: false, method: .tcp, effectivePort: 0, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .invalidTarget, failureMessage: "Destino inválido", toolOutput: nil)
         }
 
         if row.kind == .ssh || row.kind == .rdp {
@@ -225,7 +226,8 @@ enum ConnectivityChecker {
                             durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                             checkedAt: end,
                             failureKind: nil,
-                            failureMessage: nil
+                            failureMessage: nil,
+                            toolOutput: nil
                         )
                     }
 
@@ -245,7 +247,8 @@ enum ConnectivityChecker {
                         durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                         checkedAt: end,
                         failureKind: tcp.failureKind ?? nmap.failureKind ?? .unreachable,
-                        failureMessage: combinedReason
+                        failureMessage: combinedReason,
+                        toolOutput: nmap.output
                     )
                 }
                 end = Date()
@@ -256,7 +259,8 @@ enum ConnectivityChecker {
                     durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                     checkedAt: end,
                     failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
-                    failureMessage: nmap.ok ? nil : nmap.failureMessage
+                    failureMessage: nmap.ok ? nil : nmap.failureMessage,
+                    toolOutput: nmap.output
                 )
             }
 
@@ -269,7 +273,8 @@ enum ConnectivityChecker {
                 durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                 checkedAt: end,
                 failureKind: tcp.ok ? nil : tcp.failureKind,
-                failureMessage: tcp.ok ? nil : tcp.failureMessage
+                failureMessage: tcp.ok ? nil : tcp.failureMessage,
+                toolOutput: nil
             )
         }
 
@@ -277,12 +282,12 @@ enum ConnectivityChecker {
         let tcp = await checkTCPDetailed(host: endpoint.host, port: endpoint.port, timeout: timeout)
         if tcp.ok {
             end = Date()
-            return CheckResult(isOnline: true, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil)
+            return CheckResult(isOnline: true, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil, toolOutput: nil)
         }
 
         guard row.kind == .url else {
             end = Date()
-            return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind, failureMessage: tcp.failureMessage)
+            return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind, failureMessage: tcp.failureMessage, toolOutput: nil)
         }
 
         let fallbackPorts = fallbackPortsForURL(from: row.url, preferredPort: endpoint.port, extras: urlFallbackPorts)
@@ -296,12 +301,13 @@ enum ConnectivityChecker {
                 durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                 checkedAt: end,
                 failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
-                failureMessage: nmap.ok ? nil : nmap.failureMessage
+                failureMessage: nmap.ok ? nil : nmap.failureMessage,
+                toolOutput: nmap.output
             )
         }
 
         end = Date()
-        return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind, failureMessage: tcp.failureMessage)
+        return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind, failureMessage: tcp.failureMessage, toolOutput: nil)
     }
 
     private static func endpoint(for row: AccessRow) -> (host: String, port: Int)? {
@@ -463,6 +469,18 @@ enum ConnectivityChecker {
         let openPort: Int?
         let failureKind: FailureKind?
         let failureMessage: String?
+        let output: String
+    }
+
+    private static func truncateToolOutput(_ text: String, limit: Int = 1200) -> String {
+        let cleaned = text
+            .replacingOccurrences(of: "\r", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.count <= limit {
+            return cleaned
+        }
+        let idx = cleaned.index(cleaned.startIndex, offsetBy: max(0, limit))
+        return String(cleaned[..<idx]) + "…"
     }
 
     private static func parseOpenPortFromNmapOutput(_ text: String) -> Int? {
@@ -483,14 +501,14 @@ enum ConnectivityChecker {
 
     private static func checkWithNmapDetailed(host: String, ports: [Int], timeout: TimeInterval) async -> NmapProbeResult {
         if Task.isCancelled {
-            return .init(ok: false, openPort: nil, failureKind: .cancelled, failureMessage: nil)
+            return .init(ok: false, openPort: nil, failureKind: .cancelled, failureMessage: nil, output: "")
         }
 
         guard let nmapPath = resolveNmapPath() else {
-            return .init(ok: false, openPort: nil, failureKind: .nmapAbsent, failureMessage: "nmap ausente")
+            return .init(ok: false, openPort: nil, failureKind: .nmapAbsent, failureMessage: "nmap ausente", output: "")
         }
         guard !ports.isEmpty else {
-            return .init(ok: false, openPort: nil, failureKind: .invalidTarget, failureMessage: "Portas inválidas")
+            return .init(ok: false, openPort: nil, failureKind: .invalidTarget, failureMessage: "Portas inválidas", output: "")
         }
 
         return await withCheckedContinuation { continuation in
@@ -523,33 +541,33 @@ enum ConnectivityChecker {
                     let output = String(data: outputData, encoding: .utf8) ?? ""
                     let errors = String(data: errorData, encoding: .utf8) ?? ""
                     let combined = (output + "\n" + errors).lowercased()
+                    let rawOut = truncateToolOutput(output + "\n" + errors)
 
                     if process.terminationStatus != 0 {
                         let firstLine = (errors + "\n" + output).split(whereSeparator: \ .isNewline).map(String.init).first ?? ""
                         let msg = firstLine.isEmpty ? "nmap falhou (exit=\(process.terminationStatus))" : firstLine
-                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: msg))
+                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: msg, output: rawOut))
                         return
                     }
 
                     if let openPort = parseOpenPortFromNmapOutput(output + "\n" + errors) {
-                        continuation.resume(returning: .init(ok: true, openPort: openPort, failureKind: nil, failureMessage: nil))
+                        continuation.resume(returning: .init(ok: true, openPort: openPort, failureKind: nil, failureMessage: nil, output: rawOut))
                         return
                     }
 
                     if combined.contains("failed to resolve") || combined.contains("could not resolve") {
-                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .dns, failureMessage: "Erro DNS"))
+                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .dns, failureMessage: "Erro DNS", output: rawOut))
                         return
                     }
                     if combined.contains("host seems down") || combined.contains("0 hosts up") {
-                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .unreachable, failureMessage: "Host indisponível")
-                        )
+                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .unreachable, failureMessage: "Host indisponível", output: rawOut))
                         return
                     }
 
                     // With --open, closed ports may be omitted; treat as port closed.
-                    continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .portClosed, failureMessage: "Porta fechada"))
+                    continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .portClosed, failureMessage: "Porta fechada", output: rawOut))
                 } catch {
-                    continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: "Falha ao executar nmap"))
+                    continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: "Falha ao executar nmap", output: ""))
                 }
             }
         }
