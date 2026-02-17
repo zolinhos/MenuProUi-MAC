@@ -65,10 +65,10 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [ ] Pré-visualizar URL final antes de salvar.
 
 ## URL — Teste no diálogo (cadastro/edição)
-- [ ] Botão “Testar URL” no diálogo de cadastro.
-- [ ] Botão “Testar URL” no diálogo de edição.
-- [ ] Mostrar resultado do teste no próprio diálogo.
-- [ ] Salvar última URL testada no contexto da sessão.
+- [x] Botão “Testar URL” no diálogo de cadastro.
+- [x] Botão “Testar URL” no diálogo de edição.
+- [x] Mostrar resultado do teste no próprio diálogo.
+- [x] Salvar última URL testada no contexto da sessão.
 
 ## Perfis/Modes de checagem
 - [ ] Criar modo “checagem rápida” (menos tentativas).

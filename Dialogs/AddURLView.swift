@@ -14,6 +14,14 @@ struct AddURLView: View {
     @State private var tags = ""
     @State private var notes = ""
 
+    @AppStorage("connectivity.timeoutSeconds") private var connectivityTimeoutSeconds: Double = 3.0
+    @AppStorage("connectivity.urlFallbackPorts") private var urlFallbackPortsCSV: String = "443,80,8443,8080,9443"
+    @SceneStorage("session.lastTestedURL") private var lastTestedURL: String = ""
+
+    @State private var isTestingURL = false
+    @State private var urlTestResultText: String = ""
+    @State private var urlTestResultIsOnline: Bool?
+
     private var parsed: (scheme: String, host: String, port: Int, path: String) {
         parseURL(urlText.trimmed)
     }
@@ -63,6 +71,29 @@ struct AddURLView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                }
+
+                if !lastTestedURL.isEmpty {
+                    Text("Última URL testada (sessão): \(lastTestedURL)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                HStack {
+                    Button(isTestingURL ? "Testando..." : "Testar URL") {
+                        testURLNow()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(isTestingURL || urlValidationError != nil)
+
+                    if !urlTestResultText.isEmpty {
+                        Text(urlTestResultText)
+                            .font(.caption)
+                            .foregroundStyle(urlTestResultIsOnline == true ? .green : (urlTestResultIsOnline == false ? .red : .secondary))
+                            .lineLimit(2)
+                    }
+                    Spacer()
                 }
 
                 TextField("Tags (opcional)", text: $tags)
@@ -144,6 +175,71 @@ struct AddURLView: View {
 
     private func sanitizePort(_ port: Int, fallback: Int) -> Int {
         (1...65535).contains(port) ? port : fallback
+    }
+
+    private func testURLNow() {
+        guard !isTestingURL else { return }
+        guard urlValidationError == nil else { return }
+        let preview = finalURLPreview
+        guard !preview.isEmpty else { return }
+
+        isTestingURL = true
+        urlTestResultText = ""
+        urlTestResultIsOnline = nil
+        lastTestedURL = preview
+
+        let timeout = max(0.5, min(connectivityTimeoutSeconds, 60.0))
+        let fallbackPorts = parsePortsCSV(urlFallbackPortsCSV, fallback: [443, 80, 8443, 8080, 9443])
+
+        let testRow = AccessRow(
+            id: "url-test",
+            clientId: clientId.trimmed,
+            clientName: "",
+            kind: .url,
+            alias: alias.trimmed,
+            name: name.trimmed,
+            host: parsed.host,
+            port: "\(parsed.port)",
+            user: "",
+            url: preview,
+            tags: "",
+            notes: "",
+            isFavorite: false,
+            openCount: 0,
+            lastOpenedAt: ""
+        )
+
+        Task(priority: .utility) {
+            let results = await ConnectivityChecker.checkAll(rows: [testRow], timeout: timeout, maxConcurrency: 1, urlFallbackPorts: fallbackPorts)
+            let result = results[testRow.id]
+            await MainActor.run {
+                isTestingURL = false
+                guard let result else {
+                    urlTestResultIsOnline = false
+                    urlTestResultText = "Falha ao testar"
+                    return
+                }
+                urlTestResultIsOnline = result.isOnline
+                if result.isOnline {
+                    urlTestResultText = "Online (\(result.method.rawValue)) \(max(0, result.durationMs))ms"
+                } else {
+                    urlTestResultText = "Offline: \(result.errorDetail)"
+                }
+            }
+        }
+    }
+
+    private func parsePortsCSV(_ raw: String, fallback: [Int]) -> [Int] {
+        let parts = raw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        var ports: [Int] = []
+        for p in parts {
+            if let v = Int(p), (1...65535).contains(v), !ports.contains(v) {
+                ports.append(v)
+            }
+        }
+        return ports.isEmpty ? fallback : ports
     }
 
     private func normalizedURLInput(_ raw: String) -> String {
