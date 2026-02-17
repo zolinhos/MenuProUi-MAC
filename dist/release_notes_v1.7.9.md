@@ -23,6 +23,13 @@ Versão MenuProUI-MAC 1.7.9
 - Varredura otimizada: deduplicação por endpoint (host/porta) para evitar checagens repetidas e acelerar listas grandes
 - Cache de conectividade por endpoint (reaproveita resultados entre acessos duplicados)
 - Checagem rápida: botão "Checar Selecionado" + auto-checagem opcional ao selecionar acesso (configurável)
+- Configurações: botões "Revalidar nmap" e "Testar nmap agora" (feedback visual)
+- Varredura: exibe % + ETA aproximado + horário início/fim + duração
+- Diagnóstico: diferencia DNS/timeout/recusada/host indisponível/porta fechada e mostra detalhe na grid
+- Grid: nova coluna "Erro" para último motivo do offline
+- Auditoria: botões rápidos para filtrar por cliente/acesso selecionado
+- URL: preserva query/fragmento e normaliza portas inválidas; "Testar URL" no diálogo de cadastro/edição com resultado no próprio diálogo
+- UX: mensagens de erro/info passaram a usar banner (toast) não-bloqueante no topo
 
 ## Notas
 - A versão 1.7.5 permanece congelada; toda evolução a partir daqui é direcionada para 1.7.9.
