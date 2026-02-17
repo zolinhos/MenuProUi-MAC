@@ -243,23 +243,49 @@ uuid-2,scma,URL,fw-web01,,,,,True,False,True,,,http://192.168.0.10:4444,,False,1
 
 ---
 
-### 3) `eventos.csv`
-
-Header:
-```
-TimestampUtc,Action,EntityType,EntityName,Details
-```
-
-Exemplo:
-```
 02/17/2026 01:51:22,create,client,teste 2 incluir,Cliente criado
-02/17/2026 02:10:00,clone,access,clone rdp,Clonado de Novo Acesso; Tipo=RDP
-02/17/2026 02:10:03,favorite,access,clone rdp,Favoritado
-02/17/2026 02:10:10,open,access,clone rdp,Acesso aberto; Tipo=RDP
+
+
+### 2) `acessos.csv`
+
+Arquivo central para persistência dos acessos SSH, RDP e URL vinculados a clientes.
+
+**Localização:** `~/.config/MenuProUI/acessos.csv`
+
+**Header:**
+```
+Id,ClientId,Tipo,Apelido,Host,Porta,Usuario,Dominio,RdpIgnoreCert,RdpFullScreen,RdpDynamicResolution,RdpWidth,RdpHeight,Url,Observacoes,IsFavorite,OpenCount,LastOpenedAt,CriadoEm,AtualizadoEm
 ```
 
----
+**Cada linha representa um acesso**, com campos para identificação, vínculo ao cliente, tipo (SSH/RDP/URL), alias, host, porta, usuário, domínio, configurações RDP, URL, observações, favorito, contador de aberturas, timestamps de criação/atualização.
 
+**Parsing robusto:**
+- Para acessos URL, o campo `Url` é analisado para extrair host, porta, caminho e esquema.
+- Para SSH/RDP, os campos específicos são usados.
+
+**Validações automáticas:**
+- IDs duplicados
+- Tipos desconhecidos
+- Portas inválidas
+- Alias duplicados por cliente/tipo
+- Host vazio (warning para URL)
+
+**Operações suportadas:**
+- Adicionar, editar, deletar, favoritar, marcar como aberto
+- Importar/exportar
+- Backup automático e restore
+
+**CSV simples:** split por vírgula, sem suporte a vírgulas nos campos.
+
+Exemplo SSH:
+```
+uuid-1,scma,SSH,scma-ssh01,10.0.0.10,2222,root,,True,False,True,,,,Acesso Linux,True,3,02/17/2026 02:01:44,02/17/2026 00:56:19,02/17/2026 00:56:19
+```
+
+Exemplo URL:
+```
+
+```
 ## 🔗 Como a ação “Abrir” funciona
 
 ### SSH
