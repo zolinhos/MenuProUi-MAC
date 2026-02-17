@@ -71,9 +71,7 @@ struct ContentView: View {
     @State private var confirmDeleteRDP: RDPServer?
     @State private var confirmDeleteURL: URLAccess?
 
-    @State private var showError = false
-    @State private var alertTitle = "Erro"
-    @State private var errorMessage = ""
+    @State private var bannerIsError = false
     @State private var accessConnectivity: [String: ConnectivityState] = [:]
     @State private var isCheckingConnectivity = false
     @State private var lastConnectivityCheck: Date?
@@ -88,6 +86,16 @@ struct ContentView: View {
     @State private var scanEndedAt: Date?
     @State private var scanDurationSeconds: TimeInterval?
     @State private var lastConnectivityButtonTapAt: Date?
+
+    @State private var pendingExportDirectoryURL: URL?
+    @State private var showExportOverwriteConfirm = false
+
+    @State private var importPreviewText = ""
+    @State private var importPreviewURLs: [URL] = []
+    @State private var importPreviewHasErrors = false
+    @State private var showImportPreviewSheet = false
+
+    @State private var showRestoreBackupConfirm = false
     private struct ConnectivitySnapshot {
         let isOnline: Bool
         let checkedAt: Date
@@ -307,10 +315,30 @@ struct ContentView: View {
 
     private var dialogsLayer: some View {
         baseLayout
-            .alert(alertTitle, isPresented: $showError) {
-                Button("OK", role: .cancel) {}
+            .confirmationDialog("Sobrescrever arquivos existentes?", isPresented: $showExportOverwriteConfirm) {
+                Button("Sobrescrever", role: .destructive) {
+                    guard let url = pendingExportDirectoryURL else { return }
+                    doExportCSVs(to: url)
+                    pendingExportDirectoryURL = nil
+                }
+                Button("Cancelar", role: .cancel) {
+                    pendingExportDirectoryURL = nil
+                }
             } message: {
-                Text(errorMessage)
+                Text("Já existem arquivos CSV na pasta de destino. Deseja sobrescrever?")
+            }
+            .confirmationDialog("Restaurar último backup?", isPresented: $showRestoreBackupConfirm) {
+                Button("Restaurar", role: .destructive) {
+                    doRestoreLatestBackup()
+                }
+                Button("Cancelar", role: .cancel) {
+                    store.logUIAction(action: "restore_backup_cancelled", entityName: "Backups", details: "Cancelado na confirmação")
+                }
+            } message: {
+                Text("Isso vai substituir clientes.csv/acessos.csv/eventos.csv pelos arquivos do último backup disponível.")
+            }
+            .sheet(isPresented: $showImportPreviewSheet) {
+                importPreviewSheet
             }
             .confirmationDialog("Novo acesso", isPresented: $showAddAccessChooser) {
                 Button("Cadastrar SSH") { showAddSSH = true }
@@ -1080,17 +1108,15 @@ struct ContentView: View {
         ]
         let existing = targets.filter { fm.fileExists(atPath: $0.path) }
         if !existing.isEmpty {
-            let alert = NSAlert()
-            alert.messageText = "Sobrescrever arquivos existentes?"
-            alert.informativeText = "Já existem arquivos CSV na pasta de destino. Deseja sobrescrever?"
-            alert.alertStyle = .warning
-            alert.addButton(withTitle: "Sobrescrever")
-            alert.addButton(withTitle: "Cancelar")
-            if alert.runModal() != .alertFirstButtonReturn {
-                return
-            }
+            pendingExportDirectoryURL = directoryURL
+            showExportOverwriteConfirm = true
+            return
         }
 
+        doExportCSVs(to: directoryURL)
+    }
+
+    private func doExportCSVs(to directoryURL: URL) {
         do {
             try store.exportCSVs(to: directoryURL)
             showInfoText("Exportação concluída em: \(directoryURL.path)")
@@ -1112,45 +1138,20 @@ struct ContentView: View {
 
         do {
             let preview = try store.previewImportCSVs(from: panel.urls)
-            let alert = NSAlert()
-            alert.messageText = preview.hasErrors ? "Prévia de importação — erros" : "Prévia de importação"
-            alert.informativeText = preview.report
-            alert.alertStyle = preview.hasErrors ? .critical : .informational
-
-            if preview.hasErrors {
-                alert.addButton(withTitle: "OK")
-                _ = alert.runModal()
-                return
-            }
-
-            alert.addButton(withTitle: "Importar")
-            alert.addButton(withTitle: "Cancelar")
-            if alert.runModal() != .alertFirstButtonReturn {
-                store.logUIAction(action: "import_cancelled", entityName: "Importação", details: "Cancelado após prévia")
-                return
-            }
-
-            try store.importCSVs(from: panel.urls)
-            logs.reload()
-            showScanBanner = true
-            scanBannerMessage = "Importação concluída com sucesso."
+            importPreviewText = preview.report
+            importPreviewURLs = panel.urls
+            importPreviewHasErrors = preview.hasErrors
+            showImportPreviewSheet = true
         } catch {
             showErr(error)
         }
     }
 
     private func restoreLatestBackupFromSettings() {
-        let alert = NSAlert()
-        alert.messageText = "Restaurar último backup?"
-        alert.informativeText = "Isso vai substituir clientes.csv/acessos.csv/eventos.csv pelos arquivos do último backup disponível."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "Restaurar")
-        alert.addButton(withTitle: "Cancelar")
-        if alert.runModal() != .alertFirstButtonReturn {
-            store.logUIAction(action: "restore_backup_cancelled", entityName: "Backups", details: "Cancelado na confirmação")
-            return
-        }
+        showRestoreBackupConfirm = true
+    }
 
+    private func doRestoreLatestBackup() {
         do {
             try store.restoreLatestBackup()
             logs.reload()
@@ -1160,6 +1161,64 @@ struct ContentView: View {
         } catch {
             showErr(error)
         }
+    }
+
+    private var importPreviewSheet: some View {
+        NavigationStack {
+            VStack(spacing: 10) {
+                HStack {
+                    Text(importPreviewHasErrors ? "Prévia de importação — erros" : "Prévia de importação")
+                        .font(.headline)
+                    Spacer()
+                }
+
+                ScrollView {
+                    Text(importPreviewText)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+
+                Divider()
+
+                HStack {
+                    if importPreviewHasErrors {
+                        Spacer()
+                        Button("OK") { showImportPreviewSheet = false }
+                            .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Cancelar") {
+                            store.logUIAction(action: "import_cancelled", entityName: "Importação", details: "Cancelado após prévia")
+                            showImportPreviewSheet = false
+                        }
+                        Spacer()
+                        Button("Importar") {
+                            do {
+                                try store.importCSVs(from: importPreviewURLs)
+                                logs.reload()
+                                bannerIsError = false
+                                showScanBanner = true
+                                scanBannerMessage = "Importação concluída com sucesso."
+                            } catch {
+                                showErr(error)
+                            }
+                            showImportPreviewSheet = false
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+            }
+            .padding(.top, 8)
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Button("Fechar") { showImportPreviewSheet = false }
+                }
+            }
+        }
+        .presentationDetents([.large])
+        .preferredColorScheme(.dark)
     }
 
     private var helpSheet: some View {
@@ -1239,6 +1298,22 @@ struct ContentView: View {
                         ForEach(auditEntities, id: \ .self) { Text($0).tag($0) }
                     }
                     .frame(width: 180)
+
+                    if let selectedClient {
+                        Button("Cliente selecionado") {
+                            auditSearchText = selectedClient.name
+                            if auditEntities.contains("client") { auditEntityFilter = "client" }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    if let row = selectedAccessRow {
+                        Button("Acesso selecionado") {
+                            auditSearchText = row.alias
+                            if auditEntities.contains("access") { auditEntityFilter = "access" }
+                        }
+                        .buttonStyle(.bordered)
+                    }
                 }
 
                 HStack {
@@ -1564,15 +1639,15 @@ struct ContentView: View {
     }
 
     private func showErrText(_ message: String) {
-        alertTitle = "Erro"
-        errorMessage = message
-        showError = true
+        bannerIsError = true
+        scanBannerMessage = message
+        showScanBanner = true
     }
 
     private func showInfoText(_ message: String) {
-        alertTitle = "Informação"
-        errorMessage = message
-        showError = true
+        bannerIsError = false
+        scanBannerMessage = message
+        showScanBanner = true
     }
 
     private func invalidateConnectivityCache(kind: AccessKind, id: String, host: String, port: String, url: String) {
@@ -1904,8 +1979,8 @@ struct ContentView: View {
 
     private var scanStatusBanner: some View {
         HStack(spacing: 10) {
-            Image(systemName: isCheckingConnectivity ? "wave.3.right.circle.fill" : "checkmark.seal.fill")
-                .foregroundStyle(isCheckingConnectivity ? .yellow : .green)
+            Image(systemName: isCheckingConnectivity ? "wave.3.right.circle.fill" : (bannerIsError ? "xmark.octagon.fill" : "checkmark.seal.fill"))
+                .foregroundStyle(isCheckingConnectivity ? .yellow : (bannerIsError ? .red : .green))
             Text(scanBannerMessage)
                 .font(.caption)
                 .lineLimit(2)
@@ -1913,6 +1988,7 @@ struct ContentView: View {
             if !isCheckingConnectivity {
                 Button("Fechar") {
                     showScanBanner = false
+                    bannerIsError = false
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)

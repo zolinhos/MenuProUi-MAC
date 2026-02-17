@@ -26,15 +26,15 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 ## Progresso / Telemetria de varredura (UI)
 - [x] Mostrar progresso (%) da varredura.
 - [x] Mostrar contador “checados/total”.
-- [~] Mostrar tempo estimado restante.
+- [x] Mostrar tempo estimado restante.
 - [x] Exibir hora de início da varredura.
 - [x] Exibir hora de fim da varredura.
 - [x] Exibir duração total da varredura.
 - [x] Notificação não-bloqueante ao concluir varredura.
-- [~] Trocar alertas modais por toast/banner informativo.
+- [x] Trocar alertas modais por toast/banner informativo.
 
 ## Erros / Diagnóstico (conectividade)
-- [~] Notificação de erro com causa técnica resumida.
+- [x] Notificação de erro com causa técnica resumida.
 - [x] Diferenciar erro DNS, timeout, conexão recusada.
 - [x] Diferenciar “porta fechada” de “host indisponível”.
 - [x] Diferenciar “nmap ausente” de “nmap falhou”.
@@ -47,19 +47,19 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [x] Incluir porta efetiva usada no log.
 
 ## URL — validação/normalização
-- [~] Validar URL robustamente (esquema/host/porta/path).
+- [x] Validar URL robustamente (esquema/host/porta/path).
 - [x] Corrigir input http:ip automaticamente.
 - [x] Corrigir input sem esquema para http://.
 - [ ] Validar IPv4 estrito.
 - [ ] Validar IPv6 estrito.
 - [x] Suportar hostname local (intranet.local).
-- [~] Suportar URL com query string.
-- [~] Suportar URL com fragmento.
+- [x] Suportar URL com query string.
+- [x] Suportar URL com fragmento.
 - [x] Preservar maiúsculas/minúsculas no path.
 - [x] Normalizar esquema para lowercase.
-- [~] Normalizar portas inválidas para padrão por esquema.
-- [~] Tratar porta zero como inválida.
-- [~] Tratar porta >65535 como inválida.
+- [x] Normalizar portas inválidas para padrão por esquema.
+- [x] Tratar porta zero como inválida.
+- [x] Tratar porta >65535 como inválida.
 - [ ] Avisar quando URL aponta para localhost.
 - [ ] Avisar quando URL contém caractere inválido.
 - [ ] Pré-visualizar URL final antes de salvar.
@@ -74,7 +74,7 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [ ] Criar modo “checagem rápida” (menos tentativas).
 - [ ] Criar modo “checagem completa” (mais portas/retries).
 - [ ] Criar perfil “Operação” e “Diagnóstico”.
-- [~] Definir estratégia nmap por tipo de acesso.
+- [x] Definir estratégia nmap por tipo de acesso.
 - [x] SSH/RDP sempre nmap quando disponível (já iniciado).
 - [x] URL com TCP primeiro e nmap fallback (já iniciado).
 - [ ] Permitir forçar “somente nmap” para URL.
@@ -116,7 +116,7 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [ ] Context menu: “Copiar diagnóstico”.
 - [ ] Context menu: “Abrir no navegador/cliente” mantendo foco.
 - [ ] Duplo clique com debounce para evitar abertura dupla.
-- [~] Clique Enter em linha também abre (confirmar consistência).
+- [x] Clique Enter em linha também abre (confirmar consistência).
 
 ## CSV — export/import e segurança operacional
 - [x] Fortalecer sanitização de CSV contra fórmulas (=,+,-,@).
@@ -126,7 +126,7 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [x] Backup automático antes de import.
 - [x] Rollback automático se import falhar no meio.
 - [x] Tratar duplicidade de IDs no import.
-- [~] Tratar aliases duplicados por cliente.
+- [x] Tratar aliases duplicados por cliente.
 - [ ] Tratar normalização de encoding UTF-8 BOM.
 - [ ] Validar datas inválidas no histórico.
 
@@ -140,7 +140,7 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [ ] Export de auditoria em JSON para integrações.
 - [x] Busca textual na auditoria dentro do app.
 - [x] Filtro de auditoria por ação.
-- [~] Filtro de auditoria por cliente/acesso.
+- [x] Filtro de auditoria por cliente/acesso.
 
 ## Testes / CI / Release
 - [ ] Criar suíte de testes de parser de URL.
@@ -151,7 +151,7 @@ Este arquivo foi expandido para conter a lista completa fornecida na conversa (f
 - [ ] Criar teste de regressão para duplo clique abrir.
 - [ ] Criar teste de regressão para busca global.
 - [ ] Pipeline CI com build + testes automáticos.
-- [~] Pipeline release com validação de assets/notas/tag.
+- [x] Pipeline release com validação de assets/notas/tag.
 - [ ] Checklist operacional “pré-release” automatizado no CI.
 
 ## Itens já entregues (referência rápida)

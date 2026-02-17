@@ -14,6 +14,29 @@ struct AddURLView: View {
     @State private var tags = ""
     @State private var notes = ""
 
+    private var parsed: (scheme: String, host: String, port: Int, path: String) {
+        parseURL(urlText.trimmed)
+    }
+
+    private var finalURLPreview: String {
+        let p = parsed
+        guard !p.host.isEmpty else { return "" }
+        let defaultPort = defaultPort(for: p.scheme)
+        let portPart = p.port == defaultPort ? "" : ":\(p.port)"
+        return "\(p.scheme)://\(p.host)\(portPart)\(p.path)"
+    }
+
+    private var urlValidationError: String? {
+        let raw = urlText.trimmed
+        if raw.isEmpty { return "Informe uma URL" }
+        let normalized = normalizedURLInput(raw)
+        guard let comps = URLComponents(string: normalized) else { return "URL inválida" }
+        if (comps.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Host ausente na URL"
+        }
+        return nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Cadastrar URL").font(.title2).bold()
@@ -30,6 +53,17 @@ struct AddURLView: View {
                 TextField("Nome (ex: Firewall / VMware)", text: $name)
 
                 TextField("URL completa (ex: http://firewall...:4444)", text: $urlText)
+
+                if let urlValidationError {
+                    Text(urlValidationError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else if !finalURLPreview.isEmpty {
+                    Text("URL final: \(finalURLPreview)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
 
                 TextField("Tags (opcional)", text: $tags)
                 VStack(alignment: .leading, spacing: 6) {
@@ -49,7 +83,7 @@ struct AddURLView: View {
                 Button("Cancelar") { dismiss() }
                 Spacer()
                 Button("Salvar") {
-                    let parsed = parseURL(urlText.trimmed)
+                    let parsed = parsed
                     onSave(URLAccess(
                         alias: alias.trimmed,
                         clientId: clientId.trimmed,
@@ -64,7 +98,7 @@ struct AddURLView: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(clientId.trimmed.isEmpty || alias.trimmed.isEmpty || name.trimmed.isEmpty || urlText.trimmed.isEmpty)
+                .disabled(clientId.trimmed.isEmpty || alias.trimmed.isEmpty || name.trimmed.isEmpty || urlText.trimmed.isEmpty || urlValidationError != nil)
             }
         }
         .padding()
@@ -83,9 +117,15 @@ struct AddURLView: View {
             return ("http", "", 80, "/")
         }
         let scheme = (comps.scheme ?? "http").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let host = comps.host ?? ""
-        let port = comps.port ?? defaultPort(for: scheme)
-        let path = comps.path.isEmpty ? "/" : comps.path
+        let host = (comps.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let fallbackPort = defaultPort(for: scheme)
+        let port = sanitizePort(comps.port ?? fallbackPort, fallback: fallbackPort)
+
+        let basePath = comps.path.isEmpty ? "/" : comps.path
+        let queryPart = (comps.percentEncodedQuery?.isEmpty == false) ? "?\(comps.percentEncodedQuery!)" : ""
+        let fragmentPart = (comps.percentEncodedFragment?.isEmpty == false) ? "#\(comps.percentEncodedFragment!)" : ""
+        let path = basePath + queryPart + fragmentPart
         return (scheme, host, port, path)
     }
 
@@ -100,6 +140,10 @@ struct AddURLView: View {
         default:
             return 80
         }
+    }
+
+    private func sanitizePort(_ port: Int, fallback: Int) -> Int {
+        (1...65535).contains(port) ? port : fallback
     }
 
     private func normalizedURLInput(_ raw: String) -> String {

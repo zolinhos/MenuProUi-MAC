@@ -416,7 +416,10 @@ final class CSVStore: ObservableObject {
             if strict { errors.append("acessos.csv possui \(invalidPort) registros com Porta inválida") }
             else { warnings.append("acessos.csv possui \(invalidPort) registros com Porta inválida") }
         }
-        if !aliasDup.isEmpty { warnings.append("acessos.csv possui \(aliasDup.count) conflitos de alias por cliente/tipo") }
+        if !aliasDup.isEmpty {
+            if strict { errors.append("acessos.csv possui \(aliasDup.count) conflitos de alias por cliente/tipo") }
+            else { warnings.append("acessos.csv possui \(aliasDup.count) conflitos de alias por cliente/tipo") }
+        }
         return .init(count: max(0, lines.count - 1))
     }
 
@@ -1197,10 +1200,13 @@ final class CSVStore: ObservableObject {
             return ("http", "", 80, "/")
         }
         let scheme = sanitizeScheme(comps.scheme ?? "http")
-        let host = comps.host ?? ""
+        let host = (comps.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let fallbackPort = defaultPort(for: scheme)
         let port = sanitizePort(comps.port ?? fallbackPort, fallback: fallbackPort)
-        let path = sanitizePath(comps.percentEncodedPath.isEmpty ? "/" : comps.percentEncodedPath)
+        let basePath = comps.percentEncodedPath.isEmpty ? "/" : comps.percentEncodedPath
+        let queryPart = (comps.percentEncodedQuery?.isEmpty == false) ? "?\(comps.percentEncodedQuery!)" : ""
+        let fragmentPart = (comps.percentEncodedFragment?.isEmpty == false) ? "#\(comps.percentEncodedFragment!)" : ""
+        let path = sanitizePath(basePath) + queryPart + fragmentPart
         return (scheme, host, port, path)
     }
 

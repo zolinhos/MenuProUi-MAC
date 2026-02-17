@@ -7,10 +7,34 @@ struct EditURLView: View {
 
     @State private var urlText: String
 
+    private var parsed: (scheme: String, host: String, port: Int, path: String) {
+        parseURL(urlText.trimmed)
+    }
+
+    private var finalURLPreview: String {
+        let p = parsed
+        guard !p.host.isEmpty else { return "" }
+        let defaultPort = defaultPort(for: p.scheme)
+        let portPart = p.port == defaultPort ? "" : ":\(p.port)"
+        return "\(p.scheme)://\(p.host)\(portPart)\(p.path)"
+    }
+
+    private var urlValidationError: String? {
+        let raw = urlText.trimmed
+        if raw.isEmpty { return "Informe uma URL" }
+        let normalized = normalizedURLInput(raw)
+        guard let comps = URLComponents(string: normalized) else { return "URL inválida" }
+        if (comps.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "Host ausente na URL"
+        }
+        return nil
+    }
+
     init(item: URLAccess, onSave: @escaping (URLAccess) -> Void) {
         self._item = State(initialValue: item)
         self.onSave = onSave
-        let portPart = item.port == 443 ? "" : ":\(item.port)"
+        let defaultPort = item.scheme.lowercased() == "https" ? 443 : (item.scheme.lowercased() == "http" ? 80 : 80)
+        let portPart = item.port == defaultPort ? "" : ":\(item.port)"
         self._urlText = State(initialValue: "\(item.scheme)://\(item.host)\(portPart)\(item.path)")
     }
 
@@ -24,6 +48,18 @@ struct EditURLView: View {
 
                 TextField("Nome", text: $item.name)
                 TextField("URL completa", text: $urlText)
+
+                if let urlValidationError {
+                    Text(urlValidationError)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                } else if !finalURLPreview.isEmpty {
+                    Text("URL final: \(finalURLPreview)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
                 TextField("Tags", text: $item.tags)
                 TextField("Observações", text: $item.notes)
             }
@@ -32,7 +68,7 @@ struct EditURLView: View {
                 Button("Cancelar") { dismiss() }
                 Spacer()
                 Button("Salvar") {
-                    let parsed = parseURL(urlText.trimmed)
+                    let parsed = parsed
                     item.scheme = parsed.scheme
                     item.host = parsed.host
                     item.port = parsed.port
@@ -41,6 +77,7 @@ struct EditURLView: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(urlValidationError != nil)
             }
         }
         .padding()
@@ -51,9 +88,15 @@ struct EditURLView: View {
         let raw = normalizedURLInput(s)
         guard let comps = URLComponents(string: raw) else { return (item.scheme, item.host, item.port, item.path) }
         let scheme = (comps.scheme ?? item.scheme).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let host = comps.host ?? item.host
-        let port = comps.port ?? defaultPort(for: scheme)
-        let path = comps.path.isEmpty ? "/" : comps.path
+        let host = (comps.host ?? item.host).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let fallbackPort = defaultPort(for: scheme)
+        let port = sanitizePort(comps.port ?? fallbackPort, fallback: fallbackPort)
+
+        let basePath = comps.path.isEmpty ? "/" : comps.path
+        let queryPart = (comps.percentEncodedQuery?.isEmpty == false) ? "?\(comps.percentEncodedQuery!)" : ""
+        let fragmentPart = (comps.percentEncodedFragment?.isEmpty == false) ? "#\(comps.percentEncodedFragment!)" : ""
+        let path = basePath + queryPart + fragmentPart
         return (scheme, host, port, path)
     }
 
@@ -68,6 +111,10 @@ struct EditURLView: View {
         default:
             return 80
         }
+    }
+
+    private func sanitizePort(_ port: Int, fallback: Int) -> Int {
+        (1...65535).contains(port) ? port : fallback
     }
 
     private func normalizedURLInput(_ raw: String) -> String {

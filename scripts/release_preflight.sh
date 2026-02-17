@@ -59,6 +59,33 @@ require_file "scripts/publish_github_release.py"
 require_file "scripts/release_untrusted_macos.sh"
 ok "Arquivos essenciais"
 
+notes_file="dist/release_notes_v${VERSION}.md"
+if [[ -f "$notes_file" ]]; then
+  ok "Notas de release encontradas: ${notes_file}"
+else
+  fail "Notas de release ausentes: ${notes_file}"
+fi
+
+tag_name="v${VERSION}"
+if git rev-parse -q --verify "refs/tags/${tag_name}" >/dev/null 2>&1; then
+  warn "Tag já existe localmente: ${tag_name} (evite republicar com o mesmo tag)"
+else
+  ok "Tag ainda não existe localmente: ${tag_name}"
+fi
+
+zip_asset="dist/MenuProUI-MAC-app-macos-arm64-${VERSION}.zip"
+dmg_asset="dist/MenuProUI-MAC-macos-arm64-${VERSION}.dmg"
+if [[ -f "$zip_asset" ]]; then
+  ok "Asset ZIP encontrado: ${zip_asset}"
+else
+  warn "Asset ZIP não encontrado: ${zip_asset}"
+fi
+if [[ -f "$dmg_asset" ]]; then
+  ok "Asset DMG encontrado: ${dmg_asset}"
+else
+  warn "Asset DMG não encontrado: ${dmg_asset}"
+fi
+
 if grep -q 'keyboardShortcut("k", modifiers: \[\.command, \.shift\])' Views/ContentView.swift; then
   ok "Atalho ⇧⌘K presente no código"
 else
