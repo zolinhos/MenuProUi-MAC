@@ -250,7 +250,12 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showHelp) { helpSheet }
             .sheet(isPresented: $showAuditLog) { auditLogSheet }
-            .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showSettings) {
+                SettingsView(
+                    latestBackupName: store.latestBackupName() ?? "",
+                    onRestoreLatestBackup: restoreLatestBackupFromSettings
+                )
+            }
             .sheet(isPresented: $showAddClient) {
                 AddClientView { id, name, tags, notes in
                     do {
@@ -898,8 +903,52 @@ struct ContentView: View {
         guard panel.runModal() == .OK else { return }
 
         do {
+            let preview = try store.previewImportCSVs(from: panel.urls)
+            let alert = NSAlert()
+            alert.messageText = preview.hasErrors ? "Prévia de importação — erros" : "Prévia de importação"
+            alert.informativeText = preview.report
+            alert.alertStyle = preview.hasErrors ? .critical : .informational
+
+            if preview.hasErrors {
+                alert.addButton(withTitle: "OK")
+                _ = alert.runModal()
+                return
+            }
+
+            alert.addButton(withTitle: "Importar")
+            alert.addButton(withTitle: "Cancelar")
+            if alert.runModal() != .alertFirstButtonReturn {
+                store.logUIAction(action: "import_cancelled", entityName: "Importação", details: "Cancelado após prévia")
+                return
+            }
+
             try store.importCSVs(from: panel.urls)
             logs.reload()
+            showScanBanner = true
+            scanBannerMessage = "Importação concluída com sucesso."
+        } catch {
+            showErr(error)
+        }
+    }
+
+    private func restoreLatestBackupFromSettings() {
+        let alert = NSAlert()
+        alert.messageText = "Restaurar último backup?"
+        alert.informativeText = "Isso vai substituir clientes.csv/acessos.csv/eventos.csv pelos arquivos do último backup disponível."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Restaurar")
+        alert.addButton(withTitle: "Cancelar")
+        if alert.runModal() != .alertFirstButtonReturn {
+            store.logUIAction(action: "restore_backup_cancelled", entityName: "Backups", details: "Cancelado na confirmação")
+            return
+        }
+
+        do {
+            try store.restoreLatestBackup()
+            logs.reload()
+            showScanBanner = true
+            scanBannerMessage = "Backup restaurado com sucesso."
+            store.logUIAction(action: "restore_backup", entityName: "Backups", details: "Restaurado: \(store.latestBackupName() ?? "")")
         } catch {
             showErr(error)
         }

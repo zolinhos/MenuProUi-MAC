@@ -147,6 +147,193 @@ final class CSVStore: ObservableObject {
         }
     }
 
+    struct ImportPreview {
+        let hasErrors: Bool
+        let report: String
+    }
+
+    func previewImportCSVs(from fileURLs: [URL]) throws -> ImportPreview {
+        var byName: [String: URL] = [:]
+        for fileURL in fileURLs {
+            byName[fileURL.lastPathComponent.lowercased()] = fileURL
+        }
+
+        guard let clientsFile = byName["clientes.csv"], let accessesFile = byName["acessos.csv"] else {
+            return .init(hasErrors: true, report: "ERRO\n- Selecione ao menos clientes.csv e acessos.csv")
+        }
+
+        var errors: [String] = []
+        var warnings: [String] = []
+
+        do {
+            try validateCSVHeader(fileURL: clientsFile, requiredColumns: ["id", "nome"])
+        } catch {
+            errors.append(error.localizedDescription)
+        }
+        do {
+            try validateCSVHeader(fileURL: accessesFile, requiredColumns: ["id", "clientid", "tipo"])
+        } catch {
+            errors.append(error.localizedDescription)
+        }
+
+        let clientsInfo = previewClients(fileURL: clientsFile, errors: &errors, warnings: &warnings)
+        let accessesInfo = previewAccesses(fileURL: accessesFile, errors: &errors, warnings: &warnings)
+
+        if byName["eventos.csv"] == nil {
+            warnings.append("eventos.csv não selecionado (opcional) — auditoria não será importada")
+        }
+
+        var report: [String] = []
+        report.append("PRÉVIA DE IMPORTAÇÃO")
+        report.append("══════════════════")
+        report.append("")
+        report.append("Arquivos:")
+        report.append("- clientes.csv: \(clientsFile.path)")
+        report.append("- acessos.csv:  \(accessesFile.path)")
+        let eventsPath = byName["eventos.csv"]?.path ?? "(não selecionado)"
+        report.append("- eventos.csv:  \(eventsPath)")
+        report.append("")
+        report.append("Resumo:")
+        report.append("- Clientes: \(clientsInfo.count)")
+        report.append("- Acessos:  \(accessesInfo.count)")
+        report.append("")
+
+        if !errors.isEmpty {
+            report.append("ERROS:")
+            for e in errors.prefix(30) { report.append("- \(e)") }
+            if errors.count > 30 { report.append("- ... (\(errors.count - 30) adicionais)") }
+            report.append("")
+        }
+        if !warnings.isEmpty {
+            report.append("AVISOS:")
+            for w in warnings.prefix(30) { report.append("- \(w)") }
+            if warnings.count > 30 { report.append("- ... (\(warnings.count - 30) adicionais)") }
+            report.append("")
+        }
+
+        report.append("Ação:")
+        report.append(errors.isEmpty ? "- Você pode prosseguir com a importação." : "- Corrija os erros antes de importar.")
+
+        return .init(hasErrors: !errors.isEmpty, report: report.joined(separator: "\n"))
+    }
+
+    private struct PreviewCounts {
+        let count: Int
+    }
+
+    private func previewClients(fileURL: URL, errors: inout [String], warnings: inout [String]) -> PreviewCounts {
+        guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
+            errors.append("Não foi possível ler \(fileURL.lastPathComponent)")
+            return .init(count: 0)
+        }
+        let lines = content.split(whereSeparator: \ .isNewline).map(String.init)
+        guard lines.count >= 2 else {
+            warnings.append("clientes.csv sem dados")
+            return .init(count: 0)
+        }
+
+        let header = splitCSV(lines[0])
+        let map = makeColumnMap(header)
+        let idIdx = findColumn(map, aliases: ["id"]) ?? 0
+        let nameIdx = findColumn(map, aliases: ["nome", "name"]) ?? 1
+
+        var seen: Set<String> = []
+        var dup = 0
+        var emptyName = 0
+
+        for line in lines.dropFirst() {
+            let c = splitCSV(line)
+            let id = cell(c, at: idIdx).lowercased()
+            let name = cell(c, at: nameIdx)
+            if id.isEmpty { continue }
+            if seen.contains(id) { dup += 1 } else { seen.insert(id) }
+            if name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { emptyName += 1 }
+        }
+
+        if dup > 0 { warnings.append("clientes.csv possui \(dup) IDs duplicados") }
+        if emptyName > 0 { warnings.append("clientes.csv possui \(emptyName) registros com nome vazio") }
+        return .init(count: max(0, lines.count - 1))
+    }
+
+    private func previewAccesses(fileURL: URL, errors: inout [String], warnings: inout [String]) -> PreviewCounts {
+        guard let content = try? String(contentsOf: fileURL, encoding: .utf8) else {
+            errors.append("Não foi possível ler \(fileURL.lastPathComponent)")
+            return .init(count: 0)
+        }
+        let lines = content.split(whereSeparator: \ .isNewline).map(String.init)
+        guard lines.count >= 2 else {
+            warnings.append("acessos.csv sem dados")
+            return .init(count: 0)
+        }
+
+        let header = splitCSV(lines[0])
+        let map = makeColumnMap(header)
+        let idIdx = findColumn(map, aliases: ["id"]) ?? 0
+        let clientIdIdx = findColumn(map, aliases: ["clientid", "client_id"]) ?? 1
+        let kindIdx = findColumn(map, aliases: ["tipo", "type"]) ?? 2
+        let aliasIdx = findColumn(map, aliases: ["apelido", "alias"]) ?? 3
+
+        var seenId: Set<String> = []
+        var dupId = 0
+        var unknownType = 0
+        var aliasDup: Set<String> = []
+        var aliasSeen: Set<String> = []
+
+        for line in lines.dropFirst() {
+            let c = splitCSV(line)
+            let id = cell(c, at: idIdx).lowercased()
+            if !id.isEmpty {
+                if seenId.contains(id) { dupId += 1 } else { seenId.insert(id) }
+            }
+
+            let clientId = cell(c, at: clientIdIdx).lowercased()
+            let kindRaw = cell(c, at: kindIdx).uppercased()
+            if AccessKind(rawValue: kindRaw) == nil { unknownType += 1 }
+
+            let alias = cell(c, at: aliasIdx).lowercased()
+            if !clientId.isEmpty, !alias.isEmpty {
+                let key = "\(clientId)|\(kindRaw)|\(alias)"
+                if aliasSeen.contains(key) { aliasDup.insert(key) } else { aliasSeen.insert(key) }
+            }
+        }
+
+        if dupId > 0 { warnings.append("acessos.csv possui \(dupId) IDs duplicados") }
+        if unknownType > 0 { warnings.append("acessos.csv possui \(unknownType) registros com Tipo desconhecido") }
+        if !aliasDup.isEmpty { warnings.append("acessos.csv possui \(aliasDup.count) conflitos de alias por cliente/tipo") }
+        return .init(count: max(0, lines.count - 1))
+    }
+
+    func latestBackupName() -> String? {
+        let fm = FileManager.default
+        let root = backupsRootURL()
+        guard let items = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else {
+            return nil
+        }
+        let sorted = items.sorted { a, b in
+            let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return da > db
+        }
+        return sorted.first?.lastPathComponent
+    }
+
+    func restoreLatestBackup() throws {
+        let fm = FileManager.default
+        let root = backupsRootURL()
+        guard let items = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else {
+            throw NSError(domain: "CSVStore", code: 1101, userInfo: [NSLocalizedDescriptionKey: "Nenhum backup encontrado."])
+        }
+        let sorted = items.sorted { a, b in
+            let da = (try? a.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            let db = (try? b.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            return da > db
+        }
+        guard let latest = sorted.first else {
+            throw NSError(domain: "CSVStore", code: 1102, userInfo: [NSLocalizedDescriptionKey: "Nenhum backup encontrado."])
+        }
+        try restoreBackupSnapshot(from: latest)
+    }
+
     private func validateCSVHeader(fileURL: URL, requiredColumns: [String]) throws {
         let content = try String(contentsOf: fileURL, encoding: .utf8)
         guard let firstLine = content.split(whereSeparator: \ .isNewline).first else {

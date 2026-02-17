@@ -3,6 +3,9 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
+    let latestBackupName: String
+    let onRestoreLatestBackup: () -> Void
+
     @AppStorage("connectivity.timeoutSeconds") private var timeoutSeconds: Double = 3.0
     @AppStorage("connectivity.maxConcurrency") private var maxConcurrency: Int = 12
     @AppStorage("connectivity.cacheTTLSeconds") private var cacheTTLSeconds: Double = 10.0
@@ -64,6 +67,16 @@ struct SettingsView: View {
                     Text("Quando habilitado, o export pode prefixar campos perigosos (ex.: iniciando com '=' '+' '-' '@') para reduzir risco ao abrir no Excel.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Section("Backups") {
+                    Text("Último backup: \(latestBackupName.isEmpty ? "(nenhum)" : latestBackupName)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("Restaurar último backup") {
+                        onRestoreLatestBackup()
+                    }
+                    .disabled(latestBackupName.isEmpty)
                 }
 
                 Section {

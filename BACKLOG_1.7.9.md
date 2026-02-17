@@ -22,6 +22,8 @@ Legenda: [ ] pendente | [x] concluído | [~] parcial
 - [x] (91/92) Export opcional com proteção contra CSV injection
 - [x] (103) Integridade de auditoria com hash encadeado (arquivo `.chain`)
 - [x] (108/109/110) Busca/filtros na auditoria (ação/entidade/termo)
+- [x] (94) Import dry-run (prévia/relatório) antes de aplicar
+- [x] (95) Restaurar último backup via Configurações
 
 ## Versão / Release
 - [x] Defaults de scripts e checklist apontando para 1.7.9
