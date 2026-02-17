@@ -17,6 +17,7 @@ Versão MenuProUI-MAC 1.7.9
 - Viewer de auditoria com busca e filtros por ação/entidade
 - Importação com prévia (dry-run) e confirmação antes de aplicar
 - Configurações: restauração do último backup (clientes/acessos/eventos)
+- Grid de acessos: exibe última checagem, método (TCP/nmap) e latência (ms)
 
 ## Notas
 - A versão 1.7.5 permanece congelada; toda evolução a partir daqui é direcionada para 1.7.9.

@@ -71,7 +71,14 @@ struct ContentView: View {
     @State private var connectivityProgressDone = 0
     @State private var scanBannerMessage = ""
     @State private var showScanBanner = false
-    @State private var connectivityCache: [String: (isOnline: Bool, checkedAt: Date)] = [:]
+    private struct ConnectivitySnapshot {
+        let isOnline: Bool
+        let checkedAt: Date
+        let method: ConnectivityChecker.ProbeMethod
+        let durationMs: Int
+    }
+
+    @State private var connectivityCache: [String: ConnectivitySnapshot] = [:]
     @State private var f1KeyMonitor: Any?
     @FocusState private var focusedSearchField: SearchField?
 
@@ -642,11 +649,14 @@ struct ContentView: View {
     private var accessHeader: some View {
         HStack {
             Text("Status").frame(width: 54, alignment: .leading)
+            Text("Checado").frame(width: 70, alignment: .leading)
             Text("Tipo").frame(width: 60, alignment: .leading)
             Text("Alias").frame(maxWidth: .infinity, alignment: .leading)
             Text("Host").frame(maxWidth: .infinity, alignment: .leading)
             Text("Porta").frame(width: 60, alignment: .leading)
             Text("Usuário/URL").frame(maxWidth: .infinity, alignment: .leading)
+            Text("Método").frame(width: 60, alignment: .leading)
+            Text("ms").frame(width: 50, alignment: .trailing)
         }
         .font(.caption)
         .foregroundStyle(.secondary)
@@ -656,6 +666,12 @@ struct ContentView: View {
         HStack {
             connectivityIndicator(for: connectivityState(for: row.id), size: 10)
                 .frame(width: 54, alignment: .leading)
+
+            Text(lastCheckedLabel(for: row.id))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 70, alignment: .leading)
+
             Text(row.kind.rawValue).frame(width: 60, alignment: .leading)
             HStack(spacing: 6) {
                 if row.isFavorite {
@@ -670,8 +686,36 @@ struct ContentView: View {
             Text(row.kind == .url ? row.url : row.user)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(connectivityMethodLabel(for: row.id))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 60, alignment: .leading)
+
+            Text(connectivityLatencyLabel(for: row.id))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 50, alignment: .trailing)
         }
         .padding(.vertical, 3)
+    }
+
+    private func lastCheckedLabel(for accessId: String) -> String {
+        guard let snap = connectivityCache[accessId] else { return "-" }
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "pt_BR")
+        df.dateFormat = "HH:mm"
+        return df.string(from: snap.checkedAt)
+    }
+
+    private func connectivityMethodLabel(for accessId: String) -> String {
+        guard let snap = connectivityCache[accessId] else { return "-" }
+        return snap.method.rawValue
+    }
+
+    private func connectivityLatencyLabel(for accessId: String) -> String {
+        guard let snap = connectivityCache[accessId] else { return "-" }
+        return "\(max(0, snap.durationMs))"
     }
 
     private func openSelectedAccess() {
@@ -1456,10 +1500,10 @@ struct ContentView: View {
                 timeout: timeout,
                 maxConcurrency: concurrency,
                 urlFallbackPorts: fallbackPorts
-            ) { accessId, isOnline in
+            ) { accessId, result in
                 Task { @MainActor in
-                    accessConnectivity[accessId] = isOnline ? .online : .offline
-                    connectivityCache[accessId] = (isOnline: isOnline, checkedAt: Date())
+                    accessConnectivity[accessId] = result.isOnline ? .online : .offline
+                    connectivityCache[accessId] = .init(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
                     connectivityProgressDone += 1
                     scanBannerMessage = "\(startMessage) — \(connectivityProgressDone)/\(connectivityProgressTotal)"
                 }
@@ -1476,9 +1520,12 @@ struct ContentView: View {
 
             await MainActor.run {
                 for row in toCheck {
-                    let isOnline = (results[row.id] == true)
+                    let result = results[row.id]
+                    let isOnline = result?.isOnline == true
                     accessConnectivity[row.id] = isOnline ? .online : .offline
-                    connectivityCache[row.id] = (isOnline: isOnline, checkedAt: Date())
+                    if let result {
+                        connectivityCache[row.id] = .init(isOnline: result.isOnline, checkedAt: result.checkedAt, method: result.method, durationMs: result.durationMs)
+                    }
                 }
                 lastConnectivityCheck = Date()
                 isCheckingConnectivity = false

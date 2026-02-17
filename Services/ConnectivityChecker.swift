@@ -16,6 +16,18 @@ enum ConnectivityChecker {
         "/usr/bin/nmap"
     ]
 
+    enum ProbeMethod: String {
+        case tcp = "TCP"
+        case nmap = "nmap"
+    }
+
+    struct CheckResult: Sendable {
+        let isOnline: Bool
+        let method: ProbeMethod
+        let durationMs: Int
+        let checkedAt: Date
+    }
+
     static var hasNmap: Bool {
         resolveNmapPath() != nil
     }
@@ -29,11 +41,11 @@ enum ConnectivityChecker {
         timeout: TimeInterval = 3.0,
         maxConcurrency: Int = 16,
         urlFallbackPorts: [Int] = [443, 80, 8443, 8080, 9443],
-        onResult: (@Sendable (_ accessId: String, _ isOnline: Bool) -> Void)? = nil
-    ) async -> [String: Bool] {
+        onResult: (@Sendable (_ accessId: String, _ result: CheckResult) -> Void)? = nil
+    ) async -> [String: CheckResult] {
         let limit = max(1, maxConcurrency)
 
-        return await withTaskGroup(of: (String, Bool).self) { group in
+        return await withTaskGroup(of: (String, CheckResult).self) { group in
             var iterator = rows.makeIterator()
             var inFlight = 0
 
@@ -43,11 +55,8 @@ enum ConnectivityChecker {
                 guard let row = iterator.next() else { return }
                 inFlight += 1
                 group.addTask {
-                    if Task.isCancelled {
-                        return (row.id, false)
-                    }
-                    let ok = await check(row: row, timeout: timeout, urlFallbackPorts: urlFallbackPorts)
-                    return (row.id, ok)
+                    let result = await checkDetailed(row: row, timeout: timeout, urlFallbackPorts: urlFallbackPorts)
+                    return (row.id, result)
                 }
             }
 
@@ -55,11 +64,11 @@ enum ConnectivityChecker {
                 submitNext()
             }
 
-            var results: [String: Bool] = [:]
-            while let (id, isOnline) = await group.next() {
+            var results: [String: CheckResult] = [:]
+            while let (id, result) = await group.next() {
                 inFlight = max(0, inFlight - 1)
-                results[id] = isOnline
-                onResult?(id, isOnline)
+                results[id] = result
+                onResult?(id, result)
                 submitNext()
             }
 
@@ -68,31 +77,61 @@ enum ConnectivityChecker {
     }
 
     static func check(row: AccessRow, timeout: TimeInterval = 3.0, urlFallbackPorts: [Int] = [443, 80, 8443, 8080, 9443]) async -> Bool {
+        let detailed = await checkDetailed(row: row, timeout: timeout, urlFallbackPorts: urlFallbackPorts)
+        return detailed.isOnline
+    }
+
+    private static func checkDetailed(
+        row: AccessRow,
+        timeout: TimeInterval,
+        urlFallbackPorts: [Int]
+    ) async -> CheckResult {
+        let start = Date()
+        let end: Date
+
         if Task.isCancelled {
-            return false
+            end = Date()
+            return CheckResult(isOnline: false, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
         }
 
         guard let endpoint = endpoint(for: row) else {
-            return false
+            end = Date()
+            return CheckResult(isOnline: false, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
         }
 
         if row.kind == .ssh || row.kind == .rdp {
             if hasNmap {
-                return await checkWithNmap(host: endpoint.host, ports: [endpoint.port], timeout: timeout)
+                let ok = await checkWithNmap(host: endpoint.host, ports: [endpoint.port], timeout: timeout)
+                end = Date()
+                return CheckResult(isOnline: ok, method: .nmap, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
             }
-            return await checkTCP(host: endpoint.host, port: endpoint.port, timeout: timeout)
+
+            let ok = await checkTCP(host: endpoint.host, port: endpoint.port, timeout: timeout)
+            end = Date()
+            return CheckResult(isOnline: ok, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
         }
 
-        if await checkTCP(host: endpoint.host, port: endpoint.port, timeout: timeout) {
-            return true
+        // URL: try TCP first, then (optional) nmap fallback.
+        let okTCP = await checkTCP(host: endpoint.host, port: endpoint.port, timeout: timeout)
+        if okTCP {
+            end = Date()
+            return CheckResult(isOnline: true, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
         }
 
         guard row.kind == .url else {
-            return false
+            end = Date()
+            return CheckResult(isOnline: false, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
         }
 
         let fallbackPorts = fallbackPortsForURL(from: row.url, preferredPort: endpoint.port, extras: urlFallbackPorts)
-        return await checkWithNmap(host: endpoint.host, ports: fallbackPorts, timeout: timeout)
+        if hasNmap {
+            let okNmap = await checkWithNmap(host: endpoint.host, ports: fallbackPorts, timeout: timeout)
+            end = Date()
+            return CheckResult(isOnline: okNmap, method: .nmap, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
+        }
+
+        end = Date()
+        return CheckResult(isOnline: false, method: .tcp, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end)
     }
 
     private static func endpoint(for row: AccessRow) -> (host: String, port: Int)? {

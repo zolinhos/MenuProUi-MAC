@@ -15,6 +15,7 @@ Legenda: [ ] pendente | [x] concluído | [~] parcial
 - [x] (1/2/8) Configurações: timeout, concorrência, cache e portas fallback URL
 - [x] (8) Limite de concorrência aplicado na varredura
 - [x] (59) Cache curto aplicado na varredura
+- [x] (71/72/73) Colunas de conectividade (última checagem / método / latência)
 
 ## Segurança / Confiabilidade de dados
 - [x] (95/96) Import com backup e rollback automático
