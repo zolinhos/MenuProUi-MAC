@@ -374,6 +374,7 @@ struct ContentView: View {
                     latestBackupName: store.latestBackupName() ?? "",
                     onRestoreLatestBackup: restoreLatestBackupFromSettings
                 )
+                .presentationDetents([.large])
             }
             .sheet(isPresented: $showAddClient) {
                 AddClientView { id, name, tags, notes in

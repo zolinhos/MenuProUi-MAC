@@ -19,51 +19,66 @@ struct SettingsView: View {
     @State private var nmapTestResult: ConnectivityChecker.NmapTestResult?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Text("Configurações")
-                    .font(.title2)
-                    .bold()
-                Spacer()
-                Button("Fechar") { dismiss() }
-            }
-
+        NavigationStack {
             Form {
                 Section("Conectividade") {
-                    HStack {
-                        Text("Timeout (s)")
-                        Spacer()
-                        TextField("Timeout", value: $timeoutSeconds, format: .number)
-                            .frame(width: 100)
+                    VStack(alignment: .leading, spacing: 6) {
+                        LabeledContent("Timeout (s)") {
+                            TextField("Timeout", value: $timeoutSeconds, format: .number)
+                                .frame(width: 120)
+                                .monospacedDigit()
+                        }
+                        Text("Tempo máximo por tentativa de checagem (TCP e/ou nmap). Padrão: 3s. Intervalo: 0,5–60s. Em redes lentas, use 5–10s.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
-                    HStack {
-                        Text("Concorrência")
-                        Spacer()
-                        TextField("Concorrência", value: $maxConcurrency, format: .number)
-                            .frame(width: 100)
+                    VStack(alignment: .leading, spacing: 6) {
+                        LabeledContent("Concorrência") {
+                            TextField("Concorrência", value: $maxConcurrency, format: .number)
+                                .frame(width: 120)
+                                .monospacedDigit()
+                        }
+                        Text("Número máximo de checagens paralelas durante a varredura. Padrão: 12. Intervalo: 1–128. Valores altos aceleram, mas podem gerar falsos offline e pico na rede.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
-                    HStack {
-                        Text("Cache (s)")
-                        Spacer()
-                        TextField("Cache", value: $cacheTTLSeconds, format: .number)
-                            .frame(width: 100)
+                    VStack(alignment: .leading, spacing: 6) {
+                        LabeledContent("Cache (s)") {
+                            TextField("Cache", value: $cacheTTLSeconds, format: .number)
+                                .frame(width: 120)
+                                .monospacedDigit()
+                        }
+                        Text("Reaproveita resultados recentes para não repetir checagens em sequência. Padrão: 10s. 0 desliga o cache.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
-                    Toggle("Auto-checar ao selecionar acesso", isOn: $autoCheckOnSelect)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Auto-checar ao selecionar acesso", isOn: $autoCheckOnSelect)
+                        Text("Quando ligado, ao selecionar um acesso a checagem roda automaticamente (se não houver varredura em andamento).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
-                    HStack {
-                        Text("Debounce (ms)")
-                        Spacer()
-                        TextField("Debounce", value: $autoCheckDebounceMs, format: .number)
-                            .frame(width: 100)
+                    VStack(alignment: .leading, spacing: 6) {
+                        LabeledContent("Debounce (ms)") {
+                            TextField("Debounce", value: $autoCheckDebounceMs, format: .number)
+                                .frame(width: 120)
+                                .monospacedDigit()
+                        }
+                        Text("Atraso antes do auto-check disparar, para evitar checar enquanto você só está navegando na lista. Padrão: 800ms. Intervalo: 0–10.000ms.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Portas fallback URL (CSV)")
+                            .font(.headline)
                         TextField("443,80,8443...", text: $urlFallbackPortsCSV)
-                        Text("Usado quando URL falha no TCP direto e o nmap estiver disponível.")
+                            .textFieldStyle(.roundedBorder)
+                        Text("Lista de portas para o nmap testar quando a URL falha no TCP direto. Padrão: 443,80,8443,8080,9443. Use CSV com números (1–65535).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -72,6 +87,9 @@ struct SettingsView: View {
                         Text("nmap")
                             .font(.headline)
                         Text("Detectado: \(ConnectivityChecker.nmapPathDescription)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("SSH/RDP usam nmap primeiro quando disponível; URL tenta TCP primeiro e usa nmap como fallback.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
@@ -107,31 +125,43 @@ struct SettingsView: View {
                 }
 
                 Section("Exportação") {
-                    Toggle("Proteção contra CSV injection", isOn: $exportFormulaProtection)
-                    Text("Quando habilitado, o export pode prefixar campos perigosos (ex.: iniciando com '=' '+' '-' '@') para reduzir risco ao abrir no Excel.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Proteção contra CSV injection", isOn: $exportFormulaProtection)
+                        Text("Quando habilitado, o export pode prefixar campos perigosos (ex.: iniciando com '=' '+' '-' '@') para reduzir risco ao abrir no Excel/Sheets.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
 
                 Section("Backups") {
-                    Text("Último backup: \(latestBackupName.isEmpty ? "(nenhum)" : latestBackupName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button("Restaurar último backup") {
-                        onRestoreLatestBackup()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Último backup: \(latestBackupName.isEmpty ? "(nenhum)" : latestBackupName)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Restaura clientes.csv, acessos.csv e eventos.csv do snapshot mais recente criado antes de uma importação.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button("Restaurar último backup") {
+                            onRestoreLatestBackup()
+                        }
+                        .disabled(latestBackupName.isEmpty)
                     }
-                    .disabled(latestBackupName.isEmpty)
                 }
 
                 Section {
-                    Text("Dica: valores muito agressivos podem causar falsos offline em redes lentas.")
+                    Text("Dica: se sua rede for instável, aumente Timeout e diminua Concorrência para reduzir falsos offline.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
+            .navigationTitle("Configurações")
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Button("Fechar") { dismiss() }
+                }
+            }
         }
-        .padding()
-        .frame(minWidth: 640, minHeight: 440)
+        .frame(minWidth: 780, minHeight: 640)
         .preferredColorScheme(.dark)
         .onChange(of: timeoutSeconds) { v in
             timeoutSeconds = max(0.5, min(v, 60.0))
