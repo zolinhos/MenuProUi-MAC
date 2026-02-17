@@ -2,6 +2,12 @@
 .build/
 .swiftpm/
 
+# Release artifacts (keep dist/*.md tracked)
+.env.release
+dist/*.zip
+dist/*.dmg
+dist/*.app/
+
 # Xcode
 DerivedData/
 *.xcuserstate
