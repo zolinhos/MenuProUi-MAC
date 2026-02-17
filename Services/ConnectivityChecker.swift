@@ -493,10 +493,20 @@ enum ConnectivityChecker {
         let normalized = normalizedURLInput(raw)
         if let comps = URLComponents(string: normalized) {
             let scheme = (comps.scheme ?? "http").lowercased()
-            ports.append(defaultPort(for: scheme))
+            let schemeDefault = defaultPort(for: scheme)
+
+            // If the URL explicitly specifies a port, respect it and avoid scanning unrelated fallback ports.
+            if let explicit = comps.port {
+                ports.append(sanitizePort(explicit, fallback: schemeDefault))
+            } else {
+                ports.append(schemeDefault)
+                ports.append(preferredPort)
+                ports.append(contentsOf: extras)
+            }
+        } else {
+            ports.append(preferredPort)
+            ports.append(contentsOf: extras)
         }
-        ports.append(preferredPort)
-        ports.append(contentsOf: extras)
 
         var uniquePorts: [Int] = []
         for port in ports {
