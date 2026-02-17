@@ -5,6 +5,7 @@ Versão MenuProUI-MAC 1.7.10
 
 ## Novidades
 - Configurações (engrenagem) reestruturada: layout correto na sheet + explicação detalhada de cada campo
+- Configurações e Auditoria: quebra de linha (sem truncar texto) + layout maior/rolável para exibir tudo
 - Varredura de conectividade: progresso, % + ETA aproximado, cancelamento, início/fim/duração
 - Diagnóstico: detalhe de erro (DNS/timeout/recusada/host indisponível/porta fechada) + coluna "Erro" na grid
 - nmap: detecção em runtime + botões "Revalidar" e "Testar agora" nas Configurações
