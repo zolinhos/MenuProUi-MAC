@@ -20,6 +20,7 @@ Versão MenuProUI-MAC 1.7.9
 - Grid de acessos: exibe última checagem, método (TCP/nmap) e latência (ms)
 - Importação com validação mais rígida: bloqueia dados inválidos (IDs duplicados, tipo desconhecido, porta inválida) e faz rollback automático
 - Grid de acessos: filtro por status de conectividade (online/offline/checando/não checado) e ordenação por status
+- Varredura otimizada: deduplicação por endpoint (host/porta) para evitar checagens repetidas e acelerar listas grandes
 
 ## Notas
 - A versão 1.7.5 permanece congelada; toda evolução a partir daqui é direcionada para 1.7.9.
