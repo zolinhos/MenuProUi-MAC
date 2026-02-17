@@ -48,7 +48,7 @@ struct EditURLView: View {
     }
 
     private func parseURL(_ s: String) -> (scheme: String, host: String, port: Int, path: String) {
-        let raw = s.contains("://") ? s : "http://\(s)"
+        let raw = normalizedURLInput(s)
         guard let comps = URLComponents(string: raw) else { return (item.scheme, item.host, item.port, item.path) }
         let scheme = (comps.scheme ?? item.scheme).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let host = comps.host ?? item.host
@@ -68,6 +68,28 @@ struct EditURLView: View {
         default:
             return 80
         }
+    }
+
+    private func normalizedURLInput(_ raw: String) -> String {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "http://" }
+        if trimmed.contains("://") { return trimmed }
+
+        if let colonIndex = trimmed.firstIndex(of: ":") {
+            let schemePart = String(trimmed[..<colonIndex]).lowercased()
+            let remainder = String(trimmed[trimmed.index(after: colonIndex)...])
+            if isValidScheme(schemePart), !remainder.isEmpty, !remainder.hasPrefix("//") {
+                return "\(schemePart)://\(remainder)"
+            }
+        }
+
+        return "http://\(trimmed)"
+    }
+
+    private func isValidScheme(_ value: String) -> Bool {
+        guard let first = value.first else { return false }
+        guard first.isLetter else { return false }
+        return value.allSatisfy { $0.isLetter || $0.isNumber || $0 == "+" || $0 == "-" || $0 == "." }
     }
 }
 

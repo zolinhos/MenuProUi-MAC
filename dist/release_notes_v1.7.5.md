@@ -11,6 +11,11 @@ Versão MenuProUI-MAC 1.7.5
 - URLs agora preservam protocolo real (`http`/`https`) no cadastro, edição, persistência e abertura
 - URLs ampliadas para aceitar esquema flexível (`http`, `https`, `ftp` e similares), inclusive entrada sem esquema (fallback `http`)
 - Checagem de conectividade para URL aprimorada para extrair host/porta da URL completa com fallback por esquema
+- Checagem de conectividade otimizada: SSH/RDP usam `nmap` em modo rápido/agressivo (quando disponível)
+- Checagem de URL com fallback em `nmap` para portas web comuns quando o teste TCP direto falha
+- Varredura de conectividade executada em background para não bloquear o uso da aplicação
+- Avisos em tela para início/fim da varredura, incluindo resumo de online/offline
+- Aviso explícito quando `nmap` não está disponível, com fallback automático para checagem TCP nativa
 - Duplo clique na linha do acesso para abrir diretamente
 - Terminologia da interface/documentação ajustada de "HTTPS" para "URL"
 - Importação/Exportação mantidos como atalhos (`⇧⌘B` / `⇧⌘I`) e ajustes no menu de contexto (clientes/acessos)

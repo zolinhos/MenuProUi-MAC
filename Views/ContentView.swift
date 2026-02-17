@@ -51,6 +51,7 @@ struct ContentView: View {
     @State private var accessConnectivity: [String: ConnectivityState] = [:]
     @State private var isCheckingConnectivity = false
     @State private var lastConnectivityCheck: Date?
+    @State private var connectivityTask: Task<Void, Never>?
     @State private var f1KeyMonitor: Any?
     @FocusState private var focusedSearchField: SearchField?
 
@@ -1179,23 +1180,34 @@ struct ContentView: View {
         let rows = allRowsForSelectedClient
         guard !rows.isEmpty else { return }
 
+        guard !isCheckingConnectivity else {
+            showInfoText("Já existe uma varredura de conectividade em andamento.")
+            return
+        }
+
         if let selectedClient {
             store.logConnectivityCheck(scope: "cliente:\(selectedClient.name)", rowCount: rows.count)
+            performConnectivityCheck(rows: rows, scopeName: "cliente \(selectedClient.name)")
         } else {
             store.logConnectivityCheck(scope: "cliente", rowCount: rows.count)
+            performConnectivityCheck(rows: rows, scopeName: "cliente selecionado")
         }
-        performConnectivityCheck(rows: rows)
     }
 
     private func checkAllClientsConnectivity() {
         let rows = store.clients.flatMap { allRows(for: $0.id) }
         guard !rows.isEmpty else { return }
 
+        guard !isCheckingConnectivity else {
+            showInfoText("Já existe uma varredura de conectividade em andamento.")
+            return
+        }
+
         store.logConnectivityCheck(scope: "todos", rowCount: rows.count)
-        performConnectivityCheck(rows: rows)
+        performConnectivityCheck(rows: rows, scopeName: "todos os clientes")
     }
 
-    private func performConnectivityCheck(rows: [AccessRow]) {
+    private func performConnectivityCheck(rows: [AccessRow], scopeName: String) {
         guard !rows.isEmpty else { return }
 
         isCheckingConnectivity = true
@@ -1203,7 +1215,16 @@ struct ContentView: View {
             accessConnectivity[row.id] = .checking
         }
 
-        Task {
+        let startMessage: String
+        if ConnectivityChecker.hasNmap {
+            startMessage = "Varredura iniciada em background para \(scopeName). Você pode continuar usando o app enquanto o processo executa."
+        } else {
+            startMessage = "Varredura iniciada em background para \(scopeName). nmap não encontrado: usando fallback TCP nativo, o que pode reduzir precisão em alguns cenários."
+        }
+        showInfoText(startMessage)
+
+        connectivityTask?.cancel()
+        connectivityTask = Task(priority: .utility) {
             let results = await ConnectivityChecker.checkAll(rows: rows)
             await MainActor.run {
                 for row in rows {
@@ -1211,6 +1232,9 @@ struct ContentView: View {
                 }
                 lastConnectivityCheck = Date()
                 isCheckingConnectivity = false
+                let onlineCount = rows.filter { results[$0.id] == true }.count
+                let offlineCount = rows.count - onlineCount
+                showInfoText("Varredura concluída (\(scopeName)): \(onlineCount) online, \(offlineCount) offline.")
             }
         }
     }

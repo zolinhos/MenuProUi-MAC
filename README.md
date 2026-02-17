@@ -44,7 +44,12 @@ Os dados são persistidos localmente em arquivos **CSV** em `~/.config/MenuProUI
 
 ### Saúde de conectividade (manual)
 - Botão **Checar Conectividade** por cliente (sem auto-refresh)
+- A varredura roda em background: você pode continuar abrindo/editando acessos durante o processo
+- Ao finalizar a varredura, o app exibe um aviso em tela com resumo online/offline
 - Para acessos URL, a checagem testa host/porta TCP da URL (com porta explícita ou padrão por esquema: `http` 80, `https` 443, `ftp` 21)
+- Para SSH/RDP, o app usa `nmap` em modo rápido/agressivo (quando disponível) para validar porta aberta
+- Para URL, se a checagem TCP direta falhar e `nmap` estiver instalado no macOS, o app faz fallback de varredura de portas web comuns (`443`, `80`, `8443`, `8080`, `9443`)
+- Se `nmap` não estiver instalado, o app avisa e usa fallback TCP nativo
 - URLs sem endpoint TCP válido (ex.: caminhos locais/formatos não resolvíveis) podem retornar offline, mesmo abrindo no navegador
 - Status por acesso:
   - 🟢 online
