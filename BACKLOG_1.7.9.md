@@ -1,4 +1,4 @@
-# Backlog — MenuProUI-MAC 1.7.9
+# Backlog — MenuProUI-MAC 1.7.10
 
 Este arquivo acompanha a execução do backlog numerado (1–120). A versão 1.7.5 permanece congelada.
 
