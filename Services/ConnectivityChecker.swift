@@ -213,6 +213,41 @@ enum ConnectivityChecker {
         if row.kind == .ssh || row.kind == .rdp {
             if hasNmap {
                 let nmap = await checkWithNmapDetailed(host: endpoint.host, ports: [endpoint.port], timeout: timeout)
+                if !nmap.ok {
+                    // nmap can return false negatives depending on timing/filters; confirm with a TCP connect probe.
+                    let tcp = await checkTCPDetailed(host: endpoint.host, port: endpoint.port, timeout: timeout)
+                    if tcp.ok {
+                        end = Date()
+                        return CheckResult(
+                            isOnline: true,
+                            method: .tcp,
+                            effectivePort: endpoint.port,
+                            durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                            checkedAt: end,
+                            failureKind: nil,
+                            failureMessage: nil
+                        )
+                    }
+
+                    end = Date()
+                    let combinedReason: String
+                    if let tcpMsg = tcp.failureMessage, !tcpMsg.isEmpty {
+                        let nmapMsg = (nmap.failureMessage ?? "nmap falhou").trimmingCharacters(in: .whitespacesAndNewlines)
+                        combinedReason = "TCP: \(tcpMsg) | nmap: \(nmapMsg)"
+                    } else {
+                        combinedReason = nmap.failureMessage ?? "Offline"
+                    }
+
+                    return CheckResult(
+                        isOnline: false,
+                        method: .tcp,
+                        effectivePort: endpoint.port,
+                        durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                        checkedAt: end,
+                        failureKind: tcp.failureKind ?? nmap.failureKind ?? .unreachable,
+                        failureMessage: combinedReason
+                    )
+                }
                 end = Date()
                 return CheckResult(
                     isOnline: nmap.ok,
