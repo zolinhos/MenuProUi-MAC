@@ -22,6 +22,7 @@ Versão MenuProUI-MAC 1.7.9
 - Grid de acessos: filtro por status de conectividade (online/offline/checando/não checado) e ordenação por status
 - Varredura otimizada: deduplicação por endpoint (host/porta) para evitar checagens repetidas e acelerar listas grandes
 - Cache de conectividade por endpoint (reaproveita resultados entre acessos duplicados)
+- Checagem rápida: botão "Checar Selecionado" + auto-checagem opcional ao selecionar acesso (configurável)
 
 ## Notas
 - A versão 1.7.5 permanece congelada; toda evolução a partir daqui é direcionada para 1.7.9.

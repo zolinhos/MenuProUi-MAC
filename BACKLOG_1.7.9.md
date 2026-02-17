@@ -20,6 +20,7 @@ Legenda: [ ] pendente | [x] concluído | [~] parcial
 - [x] (75) Ordenação opcional por status (offline primeiro)
 - [x] (12) Deduplicação por endpoint na varredura (evita probes repetidos)
 - [x] (59/60) Cache por endpoint (além do cache por ID) para reaproveitar checagens entre acessos duplicados
+- [x] (85) Checar acesso selecionado (botão) + auto-checar ao selecionar (opcional)
 
 ## Segurança / Confiabilidade de dados
 - [x] (95/96) Import com backup e rollback automático

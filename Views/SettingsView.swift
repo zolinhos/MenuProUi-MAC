@@ -10,6 +10,8 @@ struct SettingsView: View {
     @AppStorage("connectivity.maxConcurrency") private var maxConcurrency: Int = 12
     @AppStorage("connectivity.cacheTTLSeconds") private var cacheTTLSeconds: Double = 10.0
     @AppStorage("connectivity.urlFallbackPorts") private var urlFallbackPortsCSV: String = "443,80,8443,8080,9443"
+    @AppStorage("connectivity.autoCheckOnSelect") private var autoCheckOnSelect = false
+    @AppStorage("connectivity.autoCheckDebounceMs") private var autoCheckDebounceMs: Int = 800
     @AppStorage("export.formulaProtection") private var exportFormulaProtection = false
 
     var body: some View {
@@ -42,6 +44,15 @@ struct SettingsView: View {
                         Text("Cache (s)")
                         Spacer()
                         TextField("Cache", value: $cacheTTLSeconds, format: .number)
+                            .frame(width: 100)
+                    }
+
+                    Toggle("Auto-checar ao selecionar acesso", isOn: $autoCheckOnSelect)
+
+                    HStack {
+                        Text("Debounce (ms)")
+                        Spacer()
+                        TextField("Debounce", value: $autoCheckDebounceMs, format: .number)
                             .frame(width: 100)
                     }
 
@@ -97,6 +108,9 @@ struct SettingsView: View {
         }
         .onChange(of: cacheTTLSeconds) { v in
             cacheTTLSeconds = max(0, min(v, 3600))
+        }
+        .onChange(of: autoCheckDebounceMs) { v in
+            autoCheckDebounceMs = max(0, min(v, 10_000))
         }
     }
 }

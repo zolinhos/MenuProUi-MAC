@@ -31,6 +31,8 @@ struct ContentView: View {
     @AppStorage("connectivity.maxConcurrency") private var connectivityMaxConcurrency: Int = 12
     @AppStorage("connectivity.cacheTTLSeconds") private var connectivityCacheTTLSeconds: Double = 10.0
     @AppStorage("connectivity.urlFallbackPorts") private var urlFallbackPortsCSV: String = "443,80,8443,8080,9443"
+    @AppStorage("connectivity.autoCheckOnSelect") private var autoCheckOnSelect = false
+    @AppStorage("connectivity.autoCheckDebounceMs") private var autoCheckDebounceMs: Int = 800
 
     @State private var selectedClientId: String?
     @State private var selectedAccessId: String?
@@ -96,6 +98,7 @@ struct ContentView: View {
     }
 
     @State private var endpointConnectivityCache: [ConnectivityEndpoint: ConnectivitySnapshot] = [:]
+    @State private var autoCheckTask: Task<Void, Never>?
 
     @State private var connectivityCache: [String: ConnectivitySnapshot] = [:]
     @State private var f1KeyMonitor: Any?
@@ -277,6 +280,9 @@ struct ContentView: View {
         }
         .onChange(of: selectedClientId) { _ in
             selectedAccessId = filteredRows.first?.id
+        }
+        .onChange(of: selectedAccessId) { _ in
+            scheduleAutoCheckIfNeeded()
         }
         .onChange(of: store.clients) { _ in
             if let selectedClientId,
@@ -635,6 +641,13 @@ struct ContentView: View {
                         .buttonStyle(.bordered)
                         .keyboardShortcut("k", modifiers: [.command, .shift])
                         .disabled(isCheckingConnectivity || selectedClient == nil || allRowsForSelectedClient.isEmpty)
+                        Button {
+                            checkSelectedAccessConnectivity()
+                        } label: {
+                            Label("Checar Selecionado", systemImage: "dot.radiowaves.left.and.right")
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(isCheckingConnectivity || selectedAccessRow == nil)
                         Button("Cancelar") {
                             cancelConnectivityCheck()
                         }
@@ -1534,6 +1547,33 @@ struct ContentView: View {
         }
         store.logConnectivityCheck(scope: "acesso:\(row.alias)", rowCount: 1)
         performConnectivityCheck(rows: [row], scopeName: "acesso \(row.alias)")
+    }
+
+    private func checkSelectedAccessConnectivity() {
+        guard let row = selectedAccessRow else { return }
+        checkSingleAccessConnectivity(row: row)
+    }
+
+    private func scheduleAutoCheckIfNeeded() {
+        autoCheckTask?.cancel()
+        guard autoCheckOnSelect else { return }
+        guard !isCheckingConnectivity else { return }
+        guard selectedAccessRow != nil else { return }
+
+        let delayMs = max(0, min(autoCheckDebounceMs, 10_000))
+        autoCheckTask = Task(priority: .utility) {
+            if delayMs > 0 {
+                try? await Task.sleep(nanoseconds: UInt64(delayMs) * 1_000_000)
+            }
+            if Task.isCancelled { return }
+            await MainActor.run {
+                // Re-check current selection (may have changed).
+                guard autoCheckOnSelect else { return }
+                guard !isCheckingConnectivity else { return }
+                guard let current = selectedAccessRow else { return }
+                checkSingleAccessConnectivity(row: current)
+            }
+        }
     }
 
     private func performConnectivityCheck(rows: [AccessRow], scopeName: String) {
