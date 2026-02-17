@@ -2,6 +2,13 @@ import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
 
+/// Notificação interna para duplo clique detectado via NSEvent.
+/// Usando NotificationCenter para comunicar entre AppKit (NSEvent monitor) e SwiftUI
+/// sem capturar `self` como valor (o que impediria acesso ao @State atualizado).
+private extension Notification.Name {
+    static let accessDoubleClick = Notification.Name("MenuProUI.accessDoubleClick")
+}
+
 private enum ConnectivityState {
     case unknown
     case checking
@@ -117,6 +124,8 @@ struct ContentView: View {
 
     @State private var connectivityCache: [String: ConnectivitySnapshot] = [:]
     @State private var f1KeyMonitor: Any?
+    /// Monitor de duplo clique via NSEvent (nível AppKit, não interfere na seleção do List).
+    @State private var doubleClickMonitor: Any?
     @FocusState private var focusedSearchField: SearchField?
 
     var body: some View {
@@ -296,6 +305,13 @@ struct ContentView: View {
             if selectedClientId == nil { selectedClientId = store.clients.first?.id }
             if selectedAccessId == nil { selectedAccessId = filteredRows.first?.id }
             installF1KeyMonitorIfNeeded()
+            installDoubleClickMonitorIfNeeded()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .accessDoubleClick)) { _ in
+            // Duplo clique detectado via NSEvent — abre o acesso selecionado.
+            // O List já processou a seleção no primeiro clique (mouseDown),
+            // então selectedAccessId está atualizado.
+            openSelectedAccess()
         }
         .onChange(of: selectedClientId) { _ in
             selectedAccessId = filteredRows.first?.id
@@ -311,6 +327,7 @@ struct ContentView: View {
         }
         .onDisappear {
             removeF1KeyMonitor()
+            removeDoubleClickMonitor()
         }
     }
 
@@ -784,9 +801,8 @@ struct ContentView: View {
                         ForEach(filteredRows) { row in
                             accessRowView(row)
                                 .tag(row.id)
-                                // Duplo clique abre diretamente a row clicada.
-                                // Sem .onTapGesture(count:1) — o List cuida da seleção.
-                                .onTapGesture(count: 2) { open(row: row) }
+                                // Nenhuma gesture SwiftUI aqui — seleção 100% nativa do List.
+                                // Duplo clique tratado via NSEvent monitor + NotificationCenter.
                                 .contextMenu {
                                     Button("Novo Acesso") {
                                         guard selectedClient != nil else {
@@ -887,6 +903,9 @@ struct ContentView: View {
                 .frame(width: 180, alignment: .leading)
         }
         .padding(.vertical, 3)
+        // contentShape garante que toda a área da linha (inclusive espaços entre textos)
+        // seja detectável pelo List para seleção, não apenas os Text views.
+        .contentShape(Rectangle())
     }
 
     /// Formatter estático reutilizado para evitar alocações repetidas a cada render.
@@ -1443,6 +1462,28 @@ struct ContentView: View {
         guard let f1KeyMonitor else { return }
         NSEvent.removeMonitor(f1KeyMonitor)
         self.f1KeyMonitor = nil
+    }
+
+    /// Instala monitor de duplo clique via NSEvent no nível AppKit.
+    /// Quando clickCount >= 2, posta notificação que o SwiftUI recebe via .onReceive
+    /// com o @State atualizado (selectedAccessId já definido pelo primeiro clique).
+    private func installDoubleClickMonitorIfNeeded() {
+        guard doubleClickMonitor == nil else { return }
+        doubleClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            if event.clickCount >= 2 {
+                // Dispatch async garante que o List já processou a seleção do primeiro clique.
+                DispatchQueue.main.async {
+                    NotificationCenter.default.post(name: .accessDoubleClick, object: nil)
+                }
+            }
+            return event // Sempre retorna o evento para processamento normal
+        }
+    }
+
+    private func removeDoubleClickMonitor() {
+        guard let doubleClickMonitor else { return }
+        NSEvent.removeMonitor(doubleClickMonitor)
+        self.doubleClickMonitor = nil
     }
 
     private struct AuditEvent {
