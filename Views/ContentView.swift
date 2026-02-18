@@ -1908,29 +1908,26 @@ struct ContentView: View {
             ) { endpointId, result in
                 Task { @MainActor in
                     if let endpoint = endpointByKey[endpointId] {
-                        let shouldLog = (result.method == .nmap) || (!result.isOnline)
-                        if shouldLog {
-                            let target: String
-                            switch endpoint.kind {
-                            case .url:
-                                target = endpoint.url.isEmpty ? endpoint.host : endpoint.url
-                            case .ssh, .rdp:
-                                target = "\(endpoint.host):\(result.effectivePort)"
-                            }
-                            let replicas = (endpointToIdsByKey[endpointId] ?? []).count
-                            store.logConnectivityProbe(
-                                scope: scopeName,
-                                kind: endpoint.kind.rawValue,
-                                target: target,
-                                method: result.method.rawValue,
-                                effectivePort: result.effectivePort,
-                                durationMs: result.durationMs,
-                                outcome: result.isOnline ? "online" : "offline",
-                                reason: result.errorDetail,
-                                replicas: replicas,
-                                toolOutput: result.method == .nmap ? result.toolOutput : nil
-                            )
+                        let target: String
+                        switch endpoint.kind {
+                        case .url:
+                            target = endpoint.url.isEmpty ? "\(endpoint.host):\(result.effectivePort)" : endpoint.url
+                        case .ssh, .rdp:
+                            target = "\(endpoint.host):\(result.effectivePort)"
                         }
+                        let replicas = (endpointToIdsByKey[endpointId] ?? []).count
+                        store.logConnectivityProbe(
+                            scope: scopeName,
+                            kind: endpoint.kind.rawValue,
+                            target: target,
+                            method: result.method.rawValue,
+                            effectivePort: result.effectivePort,
+                            durationMs: result.durationMs,
+                            outcome: result.isOnline ? "online" : "offline",
+                            reason: result.errorDetail,
+                            replicas: replicas,
+                            toolOutput: result.toolOutput
+                        )
                     }
 
                     for originalId in endpointToIdsByKey[endpointId] ?? [] {

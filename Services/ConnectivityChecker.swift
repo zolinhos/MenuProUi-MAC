@@ -438,8 +438,35 @@ enum ConnectivityChecker {
         // URL: try TCP first, then (optional) nmap fallback.
         let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
         if tcp.ok {
-            end = Date()
-            return CheckResult(isOnline: true, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil, toolOutput: nil)
+            // URL pode gerar falso positivo no NWConnection em alguns cenários de rota/firewall.
+            // Confirma com nc (ferramenta independente) antes de manter online.
+            let ncConfirm = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
+            if ncConfirm.ok {
+                end = Date()
+                return CheckResult(isOnline: true, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil, toolOutput: nil)
+            }
+
+            // Se nc falhou, tenta nmap no mesmo endpoint antes de declarar offline.
+            if hasNmap {
+                let nmapConfirm = await checkWithNmapDetailed(host: probeHost, ports: [endpoint.port], timeout: timeout)
+                if nmapConfirm.ok {
+                    end = Date()
+                    let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmapConfirm.output, attachments: [
+                        ("TCP", "TCP_OK"),
+                        ("NC_CONFIRM", ncConfirm.output)
+                    ])
+                    return CheckResult(
+                        isOnline: true,
+                        method: .nmap,
+                        effectivePort: nmapConfirm.openPort ?? endpoint.port,
+                        durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                        checkedAt: end,
+                        failureKind: nil,
+                        failureMessage: nil,
+                        toolOutput: toolOut
+                    )
+                }
+            }
         }
 
         guard row.kind == .url else {
