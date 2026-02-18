@@ -808,7 +808,7 @@ enum ConnectivityChecker {
                 process.executableURL = URL(fileURLWithPath: nmapPath)
                 let args: [String] = [
                     "-sT",
-                    "-Pn",
+                    // "-Pn", // Removido para permitir detecção real de host up
                     "-n",
                     "-T4",
                     "--reason",
