@@ -288,105 +288,55 @@ enum ConnectivityChecker {
         if row.kind == .ssh || row.kind == .rdp {
             if hasNmap {
                 let nmap = await checkWithNmapDetailed(host: probeHost, ports: [endpoint.port], timeout: timeout)
-                if !nmap.ok {
-                    // nmap can return false negatives depending on timing/filters; confirm with a TCP connect probe.
-                    let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
-                    if tcp.ok {
-                        end = Date()
-                        return CheckResult(
-                            isOnline: true,
-                            method: .tcp,
-                            effectivePort: endpoint.port,
-                            durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
-                            checkedAt: end,
-                            failureKind: nil,
-                            failureMessage: nil,
-                            toolOutput: nil
-                        )
-                    }
+                let tcp = await checkTCPDetailed(host: probeHost, port: nmap.openPort ?? endpoint.port, timeout: max(1.0, min(timeout, 2.5)))
 
+                if nmap.ok == tcp.ok {
                     end = Date()
-                    let combinedReason: String
-                    if let tcpMsg = tcp.failureMessage, !tcpMsg.isEmpty {
-                        let nmapMsg = (nmap.failureMessage ?? "nmap falhou").trimmingCharacters(in: .whitespacesAndNewlines)
-                        combinedReason = "TCP: \(tcpMsg) | nmap: \(nmapMsg)"
-                    } else {
-                        combinedReason = nmap.failureMessage ?? "Offline"
-                    }
-
-                    // Tertiary fallback: nc can succeed where NWConnection and nmap fail (macOS nsock bind issue).
-                    let ncProbe = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
-                    if ncProbe.ok {
-                        end = Date()
-                        let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
-                            ("TCP", "TCP_FAIL: \(tcpFailureSummary(tcp))"),
-                            ("NC_FALLBACK", ncProbe.output)
-                        ])
-                        return CheckResult(
-                            isOnline: true,
-                            method: .nc,
-                            effectivePort: endpoint.port,
-                            durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
-                            checkedAt: end,
-                            failureKind: nil,
-                            failureMessage: nil,
-                            toolOutput: toolOut
-                        )
-                    }
-
-                    let npingDiag = await npingDiagnosticsIfAvailable(host: probeHost, port: endpoint.port)
-                    let pingDiag = await pingDiagnosticsIfAvailable(host: probeHost)
-                    let routeDiag = await routeDiagnosticsIfAvailable(host: probeHost)
-                    let scutilDiag = await scutilDiagnosticsIfAvailable(host: probeHost)
-                    let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
-                        ("NPING", npingDiag),
-                        ("PING", pingDiag),
-                        ("NC", ncProbe.output)
-                        ,("ROUTE", routeDiag)
-                        ,("SCUTIL", scutilDiag)
-                    ])
                     return CheckResult(
-                        isOnline: false,
-                        method: .tcp,
-                        effectivePort: endpoint.port,
-                        durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
-                        checkedAt: end,
-                        failureKind: tcp.failureKind ?? nmap.failureKind ?? .unreachable,
-                        failureMessage: combinedReason,
-                        toolOutput: toolOut
-                    )
-                }
-                end = Date()
-                // Confirmação ativa: só aceitar online por nmap se o TCP também conectar.
-                // Evita falso positivo quando a saída do nmap indica "open" de forma enganosa.
-                let tcpConfirm = await checkTCPDetailed(host: probeHost, port: nmap.openPort ?? endpoint.port, timeout: max(1.0, min(timeout, 2.5)))
-                if !tcpConfirm.ok {
-                    let reason = "nmap indicou porta aberta, mas TCP falhou: \(tcpFailureSummary(tcpConfirm))"
-                    let toolOut = mergeToolOutputs(
-                        resolveNote: resolveNote,
-                        primary: nmap.output,
-                        attachments: [("TCP_CONFIRM", "TCP_FAIL: \(tcpFailureSummary(tcpConfirm))")]
-                    )
-                    return CheckResult(
-                        isOnline: false,
-                        method: .tcp,
+                        isOnline: nmap.ok,
+                        method: nmap.ok ? .nmap : .tcp,
                         effectivePort: nmap.openPort ?? endpoint.port,
                         durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                         checkedAt: end,
-                        failureKind: tcpConfirm.failureKind ?? .unreachable,
-                        failureMessage: reason,
-                        toolOutput: toolOut
+                        failureKind: nmap.ok ? nil : (tcp.failureKind ?? nmap.failureKind ?? .unreachable),
+                        failureMessage: nmap.ok ? nil : "TCP: \(tcpFailureSummary(tcp)) | nmap: \((nmap.failureMessage ?? "falhou").trimmingCharacters(in: .whitespacesAndNewlines))",
+                        toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [])
                     )
                 }
+
+                // Divergência: terceira via para desempate.
+                let nc = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
+                let onlineVotes = [nmap.ok, tcp.ok, nc.ok].filter { $0 }.count
+                end = Date()
+
+                if onlineVotes >= 2 {
+                    return CheckResult(
+                        isOnline: true,
+                        method: nc.ok ? .nc : (nmap.ok ? .nmap : .tcp),
+                        effectivePort: nmap.openPort ?? endpoint.port,
+                        durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                        checkedAt: end,
+                        failureKind: nil,
+                        failureMessage: nil,
+                        toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
+                            ("TCP_CONFIRM", tcp.ok ? "TCP_OK" : "TCP_FAIL: \(tcpFailureSummary(tcp))"),
+                            ("NC_TIEBREAKER", nc.output)
+                        ])
+                    )
+                }
+
                 return CheckResult(
-                    isOnline: nmap.ok,
-                    method: .nmap,
-                    effectivePort: nmap.openPort ?? endpoint.port,
+                    isOnline: false,
+                    method: .tcp,
+                    effectivePort: endpoint.port,
                     durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                     checkedAt: end,
-                    failureKind: nmap.ok ? nil : (nmap.failureKind ?? .nmapFailed),
-                    failureMessage: nmap.ok ? nil : nmap.failureMessage,
-                    toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [])
+                    failureKind: tcp.failureKind ?? nmap.failureKind ?? .unreachable,
+                    failureMessage: "Divergência resolvida como offline (nmap/tcp/nc)",
+                    toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
+                        ("TCP_CONFIRM", tcp.ok ? "TCP_OK" : "TCP_FAIL: \(tcpFailureSummary(tcp))"),
+                        ("NC_TIEBREAKER", nc.output)
+                    ])
                 )
             }
 
@@ -435,38 +385,56 @@ enum ConnectivityChecker {
             )
         }
 
-        // URL: try TCP first, then (optional) nmap fallback.
+        // URL: validar "UP" com duas formas (TCP + HTTP/curl).
         let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
-        if tcp.ok {
-            // URL pode gerar falso positivo no NWConnection em alguns cenários de rota/firewall.
-            // Confirma com nc (ferramenta independente) antes de manter online.
-            let ncConfirm = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
-            if ncConfirm.ok {
+        let curlOut = await curlDiagnosticsIfAvailable(url: row.url)
+        let curlOk = curlLooksOnline(curlOut)
+        if let curlOk {
+            if tcp.ok == curlOk {
                 end = Date()
-                return CheckResult(isOnline: true, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil, toolOutput: nil)
+                if tcp.ok {
+                    return CheckResult(isOnline: true, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil, toolOutput: nil)
+                }
+                return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: tcp.failureKind ?? .unreachable, failureMessage: "HTTP/TCP offline", toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nil, attachments: [("CURL", curlOut)]))
             }
 
-            // Se nc falhou, tenta nmap no mesmo endpoint antes de declarar offline.
-            if hasNmap {
-                let nmapConfirm = await checkWithNmapDetailed(host: probeHost, ports: [endpoint.port], timeout: timeout)
-                if nmapConfirm.ok {
-                    end = Date()
-                    let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmapConfirm.output, attachments: [
-                        ("TCP", "TCP_OK"),
-                        ("NC_CONFIRM", ncConfirm.output)
-                    ])
+            // Divergência entre métodos 1 e 2 -> terceira checagem.
+            let ncTie = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
+            var onlineVotes = (tcp.ok ? 1 : 0) + (curlOk ? 1 : 0) + (ncTie.ok ? 1 : 0)
+
+            if onlineVotes == 1 && hasNmap {
+                let nmapTie = await checkWithNmapDetailed(host: probeHost, ports: [endpoint.port], timeout: timeout)
+                onlineVotes += nmapTie.ok ? 1 : 0
+                end = Date()
+                if onlineVotes >= 2 {
                     return CheckResult(
                         isOnline: true,
-                        method: .nmap,
-                        effectivePort: nmapConfirm.openPort ?? endpoint.port,
+                        method: nmapTie.ok ? .nmap : (ncTie.ok ? .nc : .tcp),
+                        effectivePort: nmapTie.openPort ?? endpoint.port,
                         durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                         checkedAt: end,
                         failureKind: nil,
                         failureMessage: nil,
-                        toolOutput: toolOut
+                        toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmapTie.output, attachments: [("CURL", curlOut), ("NC_TIEBREAKER", ncTie.output)])
                     )
                 }
+                return CheckResult(
+                    isOnline: false,
+                    method: .tcp,
+                    effectivePort: endpoint.port,
+                    durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                    checkedAt: end,
+                    failureKind: .unreachable,
+                    failureMessage: "Divergência HTTP/TCP resolvida como offline (curl/tcp/nc/nmap)",
+                    toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmapTie.output, attachments: [("CURL", curlOut), ("NC_TIEBREAKER", ncTie.output)])
+                )
             }
+
+            end = Date()
+            if onlineVotes >= 2 {
+                return CheckResult(isOnline: true, method: ncTie.ok ? .nc : .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil, toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nil, attachments: [("CURL", curlOut), ("NC_TIEBREAKER", ncTie.output)]))
+            }
+            return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .unreachable, failureMessage: "Divergência HTTP/TCP resolvida como offline (curl/tcp/nc)", toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nil, attachments: [("CURL", curlOut), ("NC_TIEBREAKER", ncTie.output)]))
         }
 
         guard row.kind == .url else {
@@ -836,6 +804,24 @@ enum ConnectivityChecker {
             return kind.rawValue
         }
         return "falha_tcp"
+    }
+
+    private static func toolExitCode(_ output: String?) -> Int? {
+        guard let output, !output.isEmpty else { return nil }
+        for line in output.split(whereSeparator: \.isNewline) {
+            let text = String(line)
+            if text.hasPrefix("EXIT: ") {
+                return Int(text.replacingOccurrences(of: "EXIT: ", with: "").trimmingCharacters(in: .whitespaces))
+            }
+        }
+        return nil
+    }
+
+    private static func curlLooksOnline(_ output: String?) -> Bool? {
+        guard let output, !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        guard let exitCode = toolExitCode(output) else { return nil }
+        if exitCode != 0 { return false }
+        return output.lowercased().contains("http/")
     }
 
     private static func parseOpenPortFromNmapOutput(_ text: String) -> Int? {
