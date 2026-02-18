@@ -357,6 +357,27 @@ enum ConnectivityChecker {
                     )
                 }
                 end = Date()
+                // Confirmação ativa: só aceitar online por nmap se o TCP também conectar.
+                // Evita falso positivo quando a saída do nmap indica "open" de forma enganosa.
+                let tcpConfirm = await checkTCPDetailed(host: probeHost, port: nmap.openPort ?? endpoint.port, timeout: max(1.0, min(timeout, 2.5)))
+                if !tcpConfirm.ok {
+                    let reason = "nmap indicou porta aberta, mas TCP falhou: \(tcpFailureSummary(tcpConfirm))"
+                    let toolOut = mergeToolOutputs(
+                        resolveNote: resolveNote,
+                        primary: nmap.output,
+                        attachments: [("TCP_CONFIRM", "TCP_FAIL: \(tcpFailureSummary(tcpConfirm))")]
+                    )
+                    return CheckResult(
+                        isOnline: false,
+                        method: .tcp,
+                        effectivePort: nmap.openPort ?? endpoint.port,
+                        durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                        checkedAt: end,
+                        failureKind: tcpConfirm.failureKind ?? .unreachable,
+                        failureMessage: reason,
+                        toolOutput: toolOut
+                    )
+                }
                 return CheckResult(
                     isOnline: nmap.ok,
                     method: .nmap,
@@ -434,11 +455,30 @@ enum ConnectivityChecker {
             let tcpNote = "TCP_FAIL: \(tcpFailureSummary(tcp))"
 
             if nmap.ok {
+                let confirmedPort = nmap.openPort ?? endpoint.port
+                let tcpConfirm = await checkTCPDetailed(host: probeHost, port: confirmedPort, timeout: max(1.0, min(timeout, 2.5)))
+                if !tcpConfirm.ok {
+                    let reason = "nmap indicou porta aberta, mas TCP falhou: \(tcpFailureSummary(tcpConfirm))"
+                    let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
+                        ("TCP", tcpNote),
+                        ("TCP_CONFIRM", "TCP_FAIL: \(tcpFailureSummary(tcpConfirm))")
+                    ])
+                    return CheckResult(
+                        isOnline: false,
+                        method: .tcp,
+                        effectivePort: confirmedPort,
+                        durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                        checkedAt: end,
+                        failureKind: tcpConfirm.failureKind ?? .unreachable,
+                        failureMessage: reason,
+                        toolOutput: toolOut
+                    )
+                }
                 let toolOut = mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [("TCP", tcpNote)])
                 return CheckResult(
                     isOnline: true,
                     method: .nmap,
-                    effectivePort: nmap.openPort ?? endpoint.port,
+                    effectivePort: confirmedPort,
                     durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                     checkedAt: end,
                     failureKind: nil,
