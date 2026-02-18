@@ -801,69 +801,98 @@ enum ConnectivityChecker {
 
         return await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                let process = Process()
-                let outputPipe = Pipe()
-                let errorPipe = Pipe()
+                let scanPorts = ports.map(String.init).joined(separator: ",")
+                let hostTimeoutMs = max(1000, Int(timeout * 1000))
 
-                process.executableURL = URL(fileURLWithPath: nmapPath)
-                let args: [String] = [
-                    "-sT",
-                    // "-Pn", // Removido para permitir detecção real de host up
-                    "-n",
-                    "-T4",
-                    "--reason",
-                    "--max-retries", "1",
-                    "--host-timeout", "\(max(1, Int(timeout * 1000)))ms",
-                    "-p", ports.map(String.init).joined(separator: ","),
-                    host
-                ]
-                process.arguments = args
-                process.standardOutput = outputPipe
-                process.standardError = errorPipe
+                func runNmap(extraArgs: [String], label: String) -> NmapProbeResult {
+                    let process = Process()
+                    let outputPipe = Pipe()
+                    let errorPipe = Pipe()
 
-                do {
-                    try process.run()
-                    process.waitUntilExit()
+                    process.executableURL = URL(fileURLWithPath: nmapPath)
+                    let args: [String] = [
+                        "-sT",
+                        "-n",
+                        "-T4",
+                        "--reason",
+                        "--max-retries", "1",
+                        "--host-timeout", "\(hostTimeoutMs)ms"
+                    ] + extraArgs + [
+                        "-p", scanPorts,
+                        host
+                    ]
+                    process.arguments = args
+                    process.standardOutput = outputPipe
+                    process.standardError = errorPipe
 
-                    let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-                    let output = String(data: outputData, encoding: .utf8) ?? ""
-                    let errors = String(data: errorData, encoding: .utf8) ?? ""
-                    let combined = (output + "\n" + errors).lowercased()
-                    let cmdLine = ([nmapPath] + args).joined(separator: " ")
-                    let decorated = "CMD: \(cmdLine)\nEXIT: \(process.terminationStatus)\n" + output + "\n" + errors
-                    let rawOut = truncateToolOutput(decorated)
+                    do {
+                        try process.run()
+                        process.waitUntilExit()
 
-                    if process.terminationStatus != 0 {
-                        let firstLine = (errors + "\n" + output).split(whereSeparator: \ .isNewline).map(String.init).first ?? ""
-                        let msg = firstLine.isEmpty ? "nmap falhou (exit=\(process.terminationStatus))" : firstLine
-                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: msg, output: rawOut))
-                        return
+                        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+                        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+                        let output = String(data: outputData, encoding: .utf8) ?? ""
+                        let errors = String(data: errorData, encoding: .utf8) ?? ""
+                        let combined = (output + "\n" + errors).lowercased()
+                        let cmdLine = ([nmapPath] + args).joined(separator: " ")
+                        let decorated = "SCAN: \(label)\nCMD: \(cmdLine)\nEXIT: \(process.terminationStatus)\n" + output + "\n" + errors
+                        let rawOut = truncateToolOutput(decorated)
+
+                        if process.terminationStatus != 0 {
+                            let firstLine = (errors + "\n" + output).split(whereSeparator: \.isNewline).map(String.init).first ?? ""
+                            let msg = firstLine.isEmpty ? "nmap falhou (exit=\(process.terminationStatus))" : firstLine
+                            return .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: msg, output: rawOut)
+                        }
+
+                        if let openPort = parseOpenPortFromNmapOutput(output + "\n" + errors) {
+                            return .init(ok: true, openPort: openPort, failureKind: nil, failureMessage: nil, output: rawOut)
+                        }
+
+                        if combined.contains("failed to resolve") || combined.contains("could not resolve") {
+                            return .init(ok: false, openPort: nil, failureKind: .dns, failureMessage: "Erro DNS", output: rawOut)
+                        }
+                        if combined.contains("host seems down") || combined.contains("0 hosts up") {
+                            return .init(ok: false, openPort: nil, failureKind: .unreachable, failureMessage: "Host indisponível", output: rawOut)
+                        }
+
+                        if combined.contains("filtered") {
+                            return .init(ok: false, openPort: nil, failureKind: .timeout, failureMessage: "Filtrado/sem resposta", output: rawOut)
+                        }
+                        return .init(ok: false, openPort: nil, failureKind: .portClosed, failureMessage: "Porta fechada", output: rawOut)
+                    } catch {
+                        return .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: "Falha ao executar nmap", output: "")
                     }
-
-                    if let openPort = parseOpenPortFromNmapOutput(output + "\n" + errors) {
-                        continuation.resume(returning: .init(ok: true, openPort: openPort, failureKind: nil, failureMessage: nil, output: rawOut))
-                        return
-                    }
-
-                    if combined.contains("failed to resolve") || combined.contains("could not resolve") {
-                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .dns, failureMessage: "Erro DNS", output: rawOut))
-                        return
-                    }
-                    if combined.contains("host seems down") || combined.contains("0 hosts up") {
-                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .unreachable, failureMessage: "Host indisponível", output: rawOut))
-                        return
-                    }
-
-                    // No open port found in output. With --reason enabled, output should include the state.
-                    if combined.contains("filtered") {
-                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .timeout, failureMessage: "Filtrado/sem resposta", output: rawOut))
-                    } else {
-                        continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .portClosed, failureMessage: "Porta fechada", output: rawOut))
-                    }
-                } catch {
-                    continuation.resume(returning: .init(ok: false, openPort: nil, failureKind: .nmapFailed, failureMessage: "Falha ao executar nmap", output: ""))
                 }
+
+                // Primeiro sem -Pn; se host-discovery bloquear o alvo, repete com -Pn.
+                let first = runNmap(extraArgs: [], label: "default")
+                if first.ok {
+                    continuation.resume(returning: first)
+                    return
+                }
+
+                let lowerFirst = first.output.lowercased()
+                let shouldRetryWithPn = first.failureKind == .unreachable &&
+                    (lowerFirst.contains("host seems down") || lowerFirst.contains("0 hosts up"))
+
+                if shouldRetryWithPn {
+                    let second = runNmap(extraArgs: ["-Pn"], label: "retry-with-Pn")
+                    if second.ok {
+                        continuation.resume(returning: second)
+                        return
+                    }
+                    let mergedOutput = truncateToolOutput([first.output, second.output].joined(separator: "\n---\n"))
+                    continuation.resume(returning: .init(
+                        ok: false,
+                        openPort: nil,
+                        failureKind: second.failureKind ?? first.failureKind,
+                        failureMessage: second.failureMessage ?? first.failureMessage,
+                        output: mergedOutput
+                    ))
+                    return
+                }
+
+                continuation.resume(returning: first)
             }
         }
     }
