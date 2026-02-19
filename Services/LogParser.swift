@@ -109,6 +109,7 @@ final class LogParser: ObservableObject {
         let normalized = details.uppercased()
         if normalized.contains("TIPO=RDP") { return .rdp }
         if normalized.contains("TIPO=URL") { return .url }
+        if normalized.contains("TIPO=MTK") { return .mtk }
         return .ssh
     }
 

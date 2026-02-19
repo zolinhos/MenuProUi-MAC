@@ -56,6 +56,7 @@ struct ContentView: View {
     @State private var showAddSSH = false
     @State private var showAddRDP = false
     @State private var showAddURL = false
+    @State private var showAddMTK = false
     @State private var showAddAccessChooser = false
     @State private var showHelp = false
     @State private var showAuditLog = false
@@ -75,11 +76,13 @@ struct ContentView: View {
     @State private var editingSSH: SSHServer?
     @State private var editingRDP: RDPServer?
     @State private var editingURL: URLAccess?
+    @State private var editingMTK: MTKAccess?
 
     @State private var confirmDeleteClient: Client?
     @State private var confirmDeleteSSH: SSHServer?
     @State private var confirmDeleteRDP: RDPServer?
     @State private var confirmDeleteURL: URLAccess?
+    @State private var confirmDeleteMTK: MTKAccess?
 
     @State private var bannerIsError = false
     @State private var accessConnectivity: [String: ConnectivityState] = [:]
@@ -194,7 +197,10 @@ struct ContentView: View {
         let urlRows = store.urls.filter { $0.clientId.lowercased() == client }.map {
             AccessRow(id: $0.id, clientId: $0.clientId, clientName: clientName, kind: .url, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: "", url: "\($0.scheme)://\($0.host):\($0.port)\($0.path)", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
         }
-        return sortRows(sshRows + rdpRows + urlRows)
+        let mtkRows = store.mtk.filter { $0.clientId.lowercased() == client }.map {
+            AccessRow(id: $0.id, clientId: $0.clientId, clientName: clientName, kind: .mtk, alias: $0.alias, name: $0.name, host: $0.host, port: "\($0.port)", user: $0.user, url: "", tags: $0.tags, notes: $0.notes, isFavorite: $0.isFavorite, openCount: $0.openCount, lastOpenedAt: $0.lastOpenedAt)
+        }
+        return sortRows(sshRows + rdpRows + urlRows + mtkRows)
     }
 
     private func sortRows(_ rows: [AccessRow]) -> [AccessRow] {
@@ -394,6 +400,8 @@ struct ContentView: View {
                     .keyboardShortcut("2", modifiers: [.command])
                 Button("Cadastrar URL") { showAddURL = true }
                     .keyboardShortcut("3", modifiers: [.command])
+                Button("Cadastrar MTK") { showAddMTK = true }
+                    .keyboardShortcut("4", modifiers: [.command])
                 Button("Cancelar", role: .cancel) {}
                     .keyboardShortcut(.cancelAction)
             } message: {
@@ -468,6 +476,18 @@ struct ContentView: View {
                 }
                 .presentationDetents([.large])
             }
+            .sheet(isPresented: $showAddMTK) {
+                AddMTKView(clients: store.clients, preselected: selectedClient) { payload in
+                    do {
+                        try store.addMTK(alias: payload.alias, clientId: payload.clientId, name: payload.name, host: payload.host, port: payload.port, user: payload.user, tags: payload.tags, notes: payload.notes)
+                        selectedAccessId = store.mtk.first(where: {
+                            $0.clientId.caseInsensitiveCompare(payload.clientId) == .orderedSame &&
+                            $0.alias.caseInsensitiveCompare(payload.alias) == .orderedSame
+                        })?.id
+                    } catch { showErr(error) }
+                }
+                .presentationDetents([.large])
+            }
             .sheet(item: $editingClient) { client in
                 EditClientView(item: client) { updated in
                     do { try store.updateClient(updated) } catch { showErr(error) }
@@ -501,6 +521,15 @@ struct ContentView: View {
                     } catch { showErr(error) }
                 }
                 .presentationDetents([.large])
+            }
+            .sheet(item: $editingMTK) { item in
+                EditMTKView(item: item) { updated in
+                    do {
+                        try store.updateMTK(updated)
+                        invalidateConnectivityCache(kind: .mtk, id: updated.id, host: updated.host, port: "\(updated.port)", url: "")
+                    } catch { showErr(error) }
+                }
+                .presentationDetents([.medium])
             }
             .confirmationDialog("Apagar cliente?", isPresented: Binding(get: { confirmDeleteClient != nil }, set: { if !$0 { confirmDeleteClient = nil } })) {
                 Button("Apagar (cascata)", role: .destructive) {
@@ -569,6 +598,23 @@ struct ContentView: View {
                         store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
                     }
                     confirmDeleteURL = nil
+                }
+            }
+            .confirmationDialog("Apagar MTK?", isPresented: Binding(get: { confirmDeleteMTK != nil }, set: { if !$0 { confirmDeleteMTK = nil } })) {
+                Button("Apagar", role: .destructive) {
+                    guard let item = confirmDeleteMTK else { return }
+                    store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: true)
+                    do {
+                        try store.deleteMTK(id: item.id)
+                        selectedAccessId = filteredRows.first?.id
+                    } catch { showErr(error) }
+                    confirmDeleteMTK = nil
+                }
+                Button("Cancelar", role: .cancel) {
+                    if let item = confirmDeleteMTK {
+                        store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
+                    }
+                    confirmDeleteMTK = nil
                 }
             }
     }
@@ -1034,6 +1080,9 @@ struct ContentView: View {
         case .url:
             guard let access = store.urls.first(where: { $0.id == row.id }) else { return }
             URLLauncher.openURL(scheme: access.scheme, host: access.host, port: access.port, path: access.path)
+        case .mtk:
+            guard let access = store.mtk.first(where: { $0.id == row.id }) else { return }
+            WinboxLauncher.open(host: access.host, port: access.port, user: access.user)
         }
 
         do {
@@ -1063,6 +1112,8 @@ struct ContentView: View {
             editingRDP = store.rdp.first(where: { $0.id == row.id })
         case .url:
             editingURL = store.urls.first(where: { $0.id == row.id })
+        case .mtk:
+            editingMTK = store.mtk.first(where: { $0.id == row.id })
         }
     }
 
@@ -1074,6 +1125,8 @@ struct ContentView: View {
             confirmDeleteRDP = store.rdp.first(where: { $0.id == row.id })
         case .url:
             confirmDeleteURL = store.urls.first(where: { $0.id == row.id })
+        case .mtk:
+            confirmDeleteMTK = store.mtk.first(where: { $0.id == row.id })
         }
     }
 
@@ -1141,6 +1194,24 @@ struct ContentView: View {
                     $0.alias.caseInsensitiveCompare(alias) == .orderedSame
                 })?.id
                 store.logCloneEvent(sourceAlias: access.alias, newAlias: alias, kind: .url)
+            case .mtk:
+                guard let access = store.mtk.first(where: { $0.id == row.id }) else { return }
+                let alias = makeCloneAlias(base: access.alias, kind: .mtk, clientId: access.clientId)
+                try store.addMTK(
+                    alias: alias,
+                    clientId: access.clientId,
+                    name: access.name,
+                    host: access.host,
+                    port: access.port,
+                    user: access.user,
+                    tags: access.tags,
+                    notes: access.notes
+                )
+                selectedAccessId = store.mtk.first(where: {
+                    $0.clientId.caseInsensitiveCompare(access.clientId) == .orderedSame &&
+                    $0.alias.caseInsensitiveCompare(alias) == .orderedSame
+                })?.id
+                store.logCloneEvent(sourceAlias: access.alias, newAlias: alias, kind: .mtk)
             }
         } catch {
             showErr(error)
@@ -1157,6 +1228,8 @@ struct ContentView: View {
             used = Set(store.rdp.filter { $0.clientId.lowercased() == normalizedClient }.map { $0.alias.lowercased() })
         case .url:
             used = Set(store.urls.filter { $0.clientId.lowercased() == normalizedClient }.map { $0.alias.lowercased() })
+        case .mtk:
+            used = Set(store.mtk.filter { $0.clientId.lowercased() == normalizedClient }.map { $0.alias.lowercased() })
         }
 
         let root = base.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1341,6 +1414,7 @@ struct ContentView: View {
                         Text("⌘1  — Cadastrar SSH")
                         Text("⌘2  — Cadastrar RDP")
                         Text("⌘3  — Cadastrar URL")
+                        Text("⌘4  — Cadastrar MTK")
                         Text("Esc  — Cancelar")
                     }
                     .font(.caption)
@@ -1972,7 +2046,7 @@ struct ContentView: View {
                         switch endpoint.kind {
                         case .url:
                             target = endpoint.url.isEmpty ? "\(endpoint.host):\(result.effectivePort)" : endpoint.url
-                        case .ssh, .rdp:
+                        case .ssh, .rdp, .mtk:
                             target = "\(endpoint.host):\(result.effectivePort)"
                         }
                         let replicas = (endpointToIdsByKey[endpointId] ?? []).count

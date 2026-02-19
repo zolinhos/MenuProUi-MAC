@@ -285,7 +285,7 @@ enum ConnectivityChecker {
             resolveNote = "RESOLVED: host=\(endpoint.host) -> ip=\(resolved)"
         }
 
-        if row.kind == .ssh || row.kind == .rdp {
+        if row.kind == .ssh || row.kind == .rdp || row.kind == .mtk {
             if hasNmap {
                 let nmap = await checkWithNmapDetailed(host: probeHost, ports: [endpoint.port], timeout: timeout)
                 let tcp = await checkTCPDetailed(host: probeHost, port: nmap.openPort ?? endpoint.port, timeout: max(1.0, min(timeout, 2.5)))
@@ -651,7 +651,17 @@ enum ConnectivityChecker {
             return nil
         }
 
-        let fallback = row.kind == .ssh ? 22 : (row.kind == .rdp ? 3389 : 80)
+        let fallback: Int
+        switch row.kind {
+        case .ssh:
+            fallback = 22
+        case .rdp:
+            fallback = 3389
+        case .mtk:
+            fallback = 8291
+        case .url:
+            fallback = 80
+        }
         return (host, sanitizePort(rawPort, fallback: fallback))
     }
 

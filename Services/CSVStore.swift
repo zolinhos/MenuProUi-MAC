@@ -11,6 +11,7 @@ final class CSVStore: ObservableObject {
     @Published var ssh: [SSHServer] = []
     @Published var rdp: [RDPServer] = []
     @Published var urls: [URLAccess] = []
+    @Published var mtk: [MTKAccess] = []
 
     private let loggingEnabled = true
 
@@ -690,6 +691,24 @@ final class CSVStore: ObservableObject {
                     lastOpenedAt: $0.lastOpenedAt
                 )
             }
+        mtk = rows
+            .filter { $0.kind == .mtk }
+            .map {
+                MTKAccess(
+                    id: $0.id,
+                    alias: $0.alias,
+                    clientId: $0.clientId,
+                    name: $0.name,
+                    host: $0.host,
+                    port: $0.port,
+                    user: $0.user,
+                    tags: $0.tags,
+                    notes: $0.notes,
+                    isFavorite: $0.isFavorite,
+                    openCount: $0.openCount,
+                    lastOpenedAt: $0.lastOpenedAt
+                )
+            }
     }
 
     func addClient(id: String, name: String, tags: String, notes: String) throws {
@@ -919,6 +938,68 @@ final class CSVStore: ObservableObject {
         logEvent(action: "delete", entityType: "access", entityName: deleted?.alias ?? id, details: "Acesso URL excluído")
     }
 
+    func addMTK(alias: String, clientId: String, name: String, host: String, port: Int, user: String, tags: String, notes: String) throws {
+        var rows = loadAccessRows()
+        rows.append(
+            AccessRowStored(
+                id: UUID().uuidString,
+                clientId: clientId,
+                kind: .mtk,
+                alias: alias,
+                name: name,
+                host: host,
+                port: sanitizePort(port, fallback: 8291),
+                user: user,
+                domain: "",
+                rdpIgnoreCert: true,
+                rdpFullScreen: false,
+                rdpDynamicResolution: true,
+                rdpWidth: nil,
+                rdpHeight: nil,
+                path: "",
+                scheme: "https",
+                tags: tags,
+                notes: notes,
+                isFavorite: false,
+                openCount: 0,
+                lastOpenedAt: "",
+                createdAt: nowTimestamp(),
+                updatedAt: nowTimestamp()
+            )
+        )
+        try saveAccessRows(rows)
+        reload()
+        logEvent(action: "create", entityType: "access", entityName: alias, details: "Acesso MTK criado")
+    }
+
+    func updateMTK(_ updated: MTKAccess) throws {
+        var rows = loadAccessRows()
+        guard let idx = rows.firstIndex(where: { $0.kind == .mtk && $0.id.caseInsensitiveCompare(updated.id) == .orderedSame }) else { return }
+        rows[idx].clientId = updated.clientId
+        rows[idx].alias = updated.alias
+        rows[idx].name = updated.name
+        rows[idx].host = updated.host
+        rows[idx].port = sanitizePort(updated.port, fallback: 8291)
+        rows[idx].user = updated.user
+        rows[idx].tags = updated.tags
+        rows[idx].notes = updated.notes
+        rows[idx].isFavorite = updated.isFavorite
+        rows[idx].openCount = max(0, updated.openCount)
+        rows[idx].lastOpenedAt = updated.lastOpenedAt
+        try saveAccessRows(rows)
+        reload()
+        logEvent(action: "edit", entityType: "access", entityName: updated.alias, details: "Acesso MTK atualizado")
+    }
+
+    func deleteMTK(id: String) throws {
+        var rows = loadAccessRows()
+        let deleted = rows.first { $0.kind == .mtk && $0.id.caseInsensitiveCompare(id) == .orderedSame }
+        rows.removeAll { $0.kind == .mtk && $0.id.caseInsensitiveCompare(id) == .orderedSame }
+        try saveAccessRows(rows)
+        reload()
+        logEvent(action: "delete", entityType: "access", entityName: deleted?.alias ?? id, details: "Acesso MTK excluído")
+    }
+
     func toggleFavorite(kind: AccessKind, id: String) throws -> Bool {
         var rows = loadAccessRows()
         guard let idx = rows.firstIndex(where: { $0.kind == kind && $0.id.caseInsensitiveCompare(id) == .orderedSame }) else {
@@ -1059,7 +1140,7 @@ final class CSVStore: ObservableObject {
             let rawPort = cell(c, at: portIdx)
             let trimmedPort = rawPort.trimmingCharacters(in: .whitespacesAndNewlines)
             let numericPort = Int(trimmedPort) ?? Int(trimmedPort.filter({ $0.isNumber }))
-            var port = sanitizePort(numericPort ?? 0, fallback: kind == .ssh ? 22 : (kind == .rdp ? 3389 : 80))
+            var port = sanitizePort(numericPort ?? 0, fallback: defaultPort(for: kind, scheme: "http"))
             var path = pathIdx.map { sanitizePath(cell(c, at: $0)) } ?? "/"
             var scheme = "http"
             let urlValue = urlIdx.map { cell(c, at: $0) } ?? ""
@@ -1080,7 +1161,7 @@ final class CSVStore: ObservableObject {
                 let candidate = trimmedPort
                 if isLikelyIPAddress(candidate) {
                     host = candidate
-                    port = kind == .ssh ? 22 : (kind == .rdp ? 3389 : 80)
+                    port = defaultPort(for: kind, scheme: "http")
                 }
             }
 
@@ -1276,6 +1357,19 @@ final class CSVStore: ObservableObject {
         }
     }
 
+    private func defaultPort(for kind: AccessKind, scheme: String) -> Int {
+        switch kind {
+        case .ssh:
+            return 22
+        case .rdp:
+            return 3389
+        case .mtk:
+            return 8291
+        case .url:
+            return defaultPort(for: scheme)
+        }
+    }
+
     private func isLikelyIPAddress(_ s: String) -> Bool {
         let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return false }
@@ -1307,7 +1401,7 @@ final class CSVStore: ObservableObject {
             if hostEmpty, isLikelyIPAddress(portString) {
                 // Move IP from port back to host and restore default port by kind
                 rows[i].host = portString
-                rows[i].port = rows[i].kind == .ssh ? 22 : (rows[i].kind == .rdp ? 3389 : 443)
+                rows[i].port = defaultPort(for: rows[i].kind, scheme: rows[i].scheme)
                 changed = true
                 swappedFromPortIP += 1
             }
@@ -1318,7 +1412,7 @@ final class CSVStore: ObservableObject {
                 // Heuristic: if there's no dot in host and no colon, it's not an IP; swap
                 if !rows[i].host.contains(".") && !rows[i].host.contains(":") {
                     rows[i].host = ""
-                    rows[i].port = sanitizePort(h, fallback: rows[i].kind == .ssh ? 22 : (rows[i].kind == .rdp ? 3389 : 443))
+                    rows[i].port = sanitizePort(h, fallback: defaultPort(for: rows[i].kind, scheme: rows[i].scheme))
                     // Can't infer original host; leave empty for user correction
                     changed = true
                     numericHostHeuristic += 1
@@ -1330,7 +1424,7 @@ final class CSVStore: ObservableObject {
                 rows[i].port = sanitizePort(rows[i].port, fallback: defaultPort(for: rows[i].scheme))
             }
             // Ensure ports are within valid range for all kinds
-            let fallback = rows[i].kind == .ssh ? 22 : (rows[i].kind == .rdp ? 3389 : defaultPort(for: rows[i].scheme))
+            let fallback = defaultPort(for: rows[i].kind, scheme: rows[i].scheme)
             rows[i].port = sanitizePort(rows[i].port, fallback: fallback)
         }
 
@@ -1347,4 +1441,3 @@ final class CSVStore: ObservableObject {
         }
     }
 }
-

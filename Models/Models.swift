@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Cliente
 /// Representa um cliente cadastrado no sistema.
-/// Cada cliente pode ter múltiplos acessos (SSH, RDP, URL) vinculados.
+/// Cada cliente pode ter múltiplos acessos (SSH, RDP, URL, MTK) vinculados.
 struct Client: Identifiable, Hashable, Sendable {
     /// Identificador único do cliente (UUID ou definido pelo usuário).
     let id: String
@@ -164,12 +164,50 @@ struct URLAccess: Identifiable, Hashable, Sendable {
     }
 }
 
+// MARK: - MTK (MikroTik / WinBox)
+/// Representa um acesso WinBox para dispositivos MikroTik.
+struct MTKAccess: Identifiable, Hashable, Sendable {
+    let id: String
+    var alias: String
+    let clientId: String
+    var name: String
+    var host: String
+    /// Porta WinBox (padrão: 8291).
+    var port: Int
+    /// Usuário de login no RouterOS.
+    var user: String
+    var tags: String
+    var notes: String
+    var isFavorite: Bool
+    var openCount: Int
+    var lastOpenedAt: String
+    init(id: String? = nil, alias: String, clientId: String, name: String, host: String, port: Int = 8291, user: String, tags: String = "", notes: String = "", isFavorite: Bool = false, openCount: Int = 0, lastOpenedAt: String = "") {
+        if let rawId = id, !rawId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            self.id = rawId
+        } else {
+            self.id = UUID().uuidString
+        }
+        self.alias = alias
+        self.clientId = clientId
+        self.name = name
+        self.host = host
+        self.port = port
+        self.user = user
+        self.tags = tags
+        self.notes = notes
+        self.isFavorite = isFavorite
+        self.openCount = openCount
+        self.lastOpenedAt = lastOpenedAt
+    }
+}
+
 // MARK: - Enum Tipos
 /// Tipo de conexão usado no LogParser para contagem de acessos por dia.
 enum ConnType: String, Codable, CaseIterable, Sendable {
     case ssh = "SSH"
     case rdp = "RDP"
     case url = "URL"
+    case mtk = "MTK"
 }
 
 /// Tipo de acesso usado no restante do app (CRUD, checagem, UI).
@@ -177,6 +215,7 @@ enum AccessKind: String, Codable, CaseIterable, Sendable {
     case ssh = "SSH"
     case rdp = "RDP"
     case url = "URL"
+    case mtk = "MTK"
 }
 
 // MARK: - Log e Row
@@ -191,7 +230,7 @@ struct ConnLogPoint: Identifiable, Hashable, Sendable {
     let count: Int
 }
 
-/// Representa uma linha unificada de acesso na UI (combina SSH, RDP e URL numa única struct).
+/// Representa uma linha unificada de acesso na UI (combina SSH, RDP, URL e MTK numa única struct).
 /// Usada para exibição na lista de acessos e para checagem de conectividade.
 struct AccessRow: Identifiable, Sendable {
     let id: String
