@@ -53,11 +53,8 @@ struct ContentView: View {
     ]
 
     @State private var showAddClient = false
-    @State private var showAddSSH = false
-    @State private var showAddRDP = false
-    @State private var showAddURL = false
-    @State private var showAddMTK = false
-    @State private var showAddAccessChooser = false
+    @State private var showAddAccessForm = false
+    @State private var addAccessInitialKind: AccessKind = .ssh
     @State private var showHelp = false
     @State private var showAuditLog = false
     @State private var showConnectivityScopeChooser = false
@@ -393,20 +390,6 @@ struct ContentView: View {
             .sheet(isPresented: $showImportPreviewSheet) {
                 importPreviewSheet
             }
-            .confirmationDialog("Novo acesso", isPresented: $showAddAccessChooser) {
-                Button("Cadastrar SSH") { showAddSSH = true }
-                    .keyboardShortcut("1", modifiers: [.command])
-                Button("Cadastrar RDP") { showAddRDP = true }
-                    .keyboardShortcut("2", modifiers: [.command])
-                Button("Cadastrar URL") { showAddURL = true }
-                    .keyboardShortcut("3", modifiers: [.command])
-                Button("Cadastrar MTK") { showAddMTK = true }
-                    .keyboardShortcut("4", modifiers: [.command])
-                Button("Cancelar", role: .cancel) {}
-                    .keyboardShortcut(.cancelAction)
-            } message: {
-                Text("Escolha o tipo de acesso para o cliente selecionado.")
-            }
             .confirmationDialog("Checar conectividade", isPresented: $showConnectivityScopeChooser) {
                 Button("Somente este cliente") {
                     checkSelectedClientConnectivity()
@@ -440,50 +423,24 @@ struct ContentView: View {
                 }
                 .presentationDetents([.medium])
             }
-            .sheet(isPresented: $showAddSSH) {
-                AddSSHView(clients: store.clients, preselected: selectedClient) { payload in
+            .sheet(isPresented: $showAddAccessForm) {
+                AddAccessView(clients: store.clients, preselected: selectedClient, initialKind: addAccessInitialKind) { payload in
                     do {
-                        try store.addSSH(alias: payload.alias, clientId: payload.clientId, name: payload.name, host: payload.host, port: payload.port, user: payload.user, tags: payload.tags, notes: payload.notes)
-                        selectedAccessId = store.ssh.first(where: {
-                            $0.clientId.caseInsensitiveCompare(payload.clientId) == .orderedSame &&
-                            $0.alias.caseInsensitiveCompare(payload.alias) == .orderedSame
-                        })?.id
-                    } catch { showErr(error) }
-                }
-                .presentationDetents([.large])
-            }
-            .sheet(isPresented: $showAddRDP) {
-                AddRDPView(clients: store.clients, preselected: selectedClient) { payload in
-                    do {
-                        try store.addRDP(payload: payload)
-                        selectedAccessId = store.rdp.first(where: {
-                            $0.clientId.caseInsensitiveCompare(payload.clientId) == .orderedSame &&
-                            $0.alias.caseInsensitiveCompare(payload.alias) == .orderedSame
-                        })?.id
-                    } catch { showErr(error) }
-                }
-                .presentationDetents([.large])
-            }
-            .sheet(isPresented: $showAddURL) {
-                AddURLView(clients: store.clients, preselected: selectedClient) { access in
-                    do {
-                        try store.addURL(access)
-                        selectedAccessId = store.urls.first(where: {
-                            $0.clientId.caseInsensitiveCompare(access.clientId) == .orderedSame &&
-                            $0.alias.caseInsensitiveCompare(access.alias) == .orderedSame
-                        })?.id
-                    } catch { showErr(error) }
-                }
-                .presentationDetents([.large])
-            }
-            .sheet(isPresented: $showAddMTK) {
-                AddMTKView(clients: store.clients, preselected: selectedClient) { payload in
-                    do {
-                        try store.addMTK(alias: payload.alias, clientId: payload.clientId, name: payload.name, host: payload.host, port: payload.port, user: payload.user, tags: payload.tags, notes: payload.notes)
-                        selectedAccessId = store.mtk.first(where: {
-                            $0.clientId.caseInsensitiveCompare(payload.clientId) == .orderedSame &&
-                            $0.alias.caseInsensitiveCompare(payload.alias) == .orderedSame
-                        })?.id
+                        switch payload.kind {
+                        case .ssh:
+                            try store.addSSH(alias: payload.alias, clientId: payload.clientId, name: payload.name, host: payload.host, port: payload.port, user: payload.user, tags: payload.tags, notes: payload.notes)
+                            selectedAccessId = store.ssh.first(where: { $0.clientId.caseInsensitiveCompare(payload.clientId) == .orderedSame && $0.alias.caseInsensitiveCompare(payload.alias) == .orderedSame })?.id
+                        case .rdp:
+                            try store.addRDP(payload: .init(alias: payload.alias, clientId: payload.clientId, name: payload.name, host: payload.host, port: payload.port, domain: payload.domain, user: payload.user, tags: payload.tags, ignoreCert: payload.rdpIgnoreCert, fullScreen: payload.rdpFullScreen, dynamicResolution: payload.rdpDynamicResolution, width: payload.rdpWidth, height: payload.rdpHeight, notes: payload.notes))
+                            selectedAccessId = store.rdp.first(where: { $0.clientId.caseInsensitiveCompare(payload.clientId) == .orderedSame && $0.alias.caseInsensitiveCompare(payload.alias) == .orderedSame })?.id
+                        case .url:
+                            let url = URLAccess(alias: payload.alias, clientId: payload.clientId, name: payload.name, scheme: payload.scheme, host: payload.host, port: payload.port, path: payload.path, tags: payload.tags, notes: payload.notes)
+                            try store.addURL(url)
+                            selectedAccessId = store.urls.first(where: { $0.clientId.caseInsensitiveCompare(payload.clientId) == .orderedSame && $0.alias.caseInsensitiveCompare(payload.alias) == .orderedSame })?.id
+                        case .mtk:
+                            try store.addMTK(alias: payload.alias, clientId: payload.clientId, name: payload.name, host: payload.host, port: payload.port, user: payload.user, tags: payload.tags, notes: payload.notes)
+                            selectedAccessId = store.mtk.first(where: { $0.clientId.caseInsensitiveCompare(payload.clientId) == .orderedSame && $0.alias.caseInsensitiveCompare(payload.alias) == .orderedSame })?.id
+                        }
                     } catch { showErr(error) }
                 }
                 .presentationDetents([.large])
@@ -650,7 +607,7 @@ struct ContentView: View {
                         return
                     }
                     store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=botão principal")
-                    showAddAccessChooser = true
+                    openAddAccessForm(preferred: .ssh)
                 } label: {
                     Label("Novo Acesso", systemImage: "plus.circle")
                 }
@@ -967,7 +924,7 @@ struct ContentView: View {
                                 return
                             }
                             store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=context menu grid acessos")
-                            showAddAccessChooser = true
+                            openAddAccessForm(preferred: .ssh)
                         }
                         if let target {
                             Divider()
@@ -1410,11 +1367,8 @@ struct ContentView: View {
                         Text("Botão Favoritar — alterna favorito do acesso selecionado")
                         Text("⌫   — Excluir acesso selecionado")
                         Text("⌘/ ou F1 — Abrir Ajuda")
-                        Text("No diálogo \"Novo acesso\":")
-                        Text("⌘1  — Cadastrar SSH")
-                        Text("⌘2  — Cadastrar RDP")
-                        Text("⌘3  — Cadastrar URL")
-                        Text("⌘4  — Cadastrar MTK")
+                        Text("No formulário \"Novo acesso\":")
+                        Text("Campo Tipo: SSH, RDP, URL ou MTK")
                         Text("Esc  — Cancelar")
                     }
                     .font(.caption)
@@ -1912,6 +1866,15 @@ struct ContentView: View {
     private func checkSelectedAccessConnectivity() {
         guard let row = selectedAccessRow else { return }
         checkSingleAccessConnectivity(row: row)
+    }
+
+    private func openAddAccessForm(preferred: AccessKind) {
+        guard selectedClient != nil else {
+            showErrText("Selecione um cliente antes de criar um acesso.")
+            return
+        }
+        addAccessInitialKind = preferred
+        showAddAccessForm = true
     }
 
     private func scheduleAutoCheckIfNeeded() {
