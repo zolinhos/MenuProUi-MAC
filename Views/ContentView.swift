@@ -22,12 +22,12 @@ private enum SearchField: Hashable {
     case accesses
 }
 
-private enum ConnectivityFilter: String, CaseIterable {
-    case all = "Todos"
-    case online = "Online"
-    case offline = "Offline"
-    case checking = "Checando"
-    case unknown = "Não checado"
+private enum ConnectivityFilter: CaseIterable {
+    case all
+    case online
+    case offline
+    case checking
+    case unknown
 }
 
 struct ContentView: View {
@@ -249,6 +249,16 @@ struct ContentView: View {
         }
     }
 
+    private func connectivityFilterLabel(_ item: ConnectivityFilter) -> String {
+        switch item {
+        case .all: return t("Todos", "All")
+        case .online: return t("Online", "Online")
+        case .offline: return t("Offline", "Offline")
+        case .checking: return t("Checando", "Checking")
+        case .unknown: return t("Não checado", "Not checked")
+        }
+    }
+
     private var filteredRows: [AccessRow] {
         let localTerm = accessesSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let globalTerm = globalSearchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -375,39 +385,39 @@ struct ContentView: View {
                     doExportCSVs(to: url)
                     pendingExportDirectoryURL = nil
                 }
-                Button("Cancelar", role: .cancel) {
+                Button(t("Cancelar", "Cancel"), role: .cancel) {
                     pendingExportDirectoryURL = nil
                 }
             } message: {
-                Text("Já existem arquivos CSV na pasta de destino. Deseja sobrescrever?")
+                Text(t("Já existem arquivos CSV na pasta de destino. Deseja sobrescrever?", "CSV files already exist in destination folder. Overwrite?"))
             }
-            .confirmationDialog("Restaurar último backup?", isPresented: $showRestoreBackupConfirm) {
-                Button("Restaurar", role: .destructive) {
+            .confirmationDialog(t("Restaurar último backup?", "Restore latest backup?"), isPresented: $showRestoreBackupConfirm) {
+                Button(t("Restaurar", "Restore"), role: .destructive) {
                     doRestoreLatestBackup()
                 }
-                Button("Cancelar", role: .cancel) {
+                Button(t("Cancelar", "Cancel"), role: .cancel) {
                     store.logUIAction(action: "restore_backup_cancelled", entityName: "Backups", details: "Cancelado na confirmação")
                 }
             } message: {
-                Text("Isso vai substituir clientes.csv/acessos.csv/eventos.csv pelos arquivos do último backup disponível.")
+                Text(t("Isso vai substituir clientes.csv/acessos.csv/eventos.csv pelos arquivos do último backup disponível.", "This will replace clientes.csv/acessos.csv/eventos.csv with the latest backup snapshot."))
             }
             .sheet(isPresented: $showImportPreviewSheet) {
                 importPreviewSheet
             }
-            .confirmationDialog("Checar conectividade", isPresented: $showConnectivityScopeChooser) {
-                Button("Somente este cliente") {
+            .confirmationDialog(t("Checar conectividade", "Check connectivity"), isPresented: $showConnectivityScopeChooser) {
+                Button(t("Somente este cliente", "Only this client")) {
                     checkSelectedClientConnectivity()
                 }
                 .keyboardShortcut(.defaultAction)
 
-                Button("Todos os clientes") {
+                Button(t("Todos os clientes", "All clients")) {
                     checkAllClientsConnectivity()
                 }
 
-                Button("Cancelar", role: .cancel) {}
+                Button(t("Cancelar", "Cancel"), role: .cancel) {}
                     .keyboardShortcut(.cancelAction)
             } message: {
-                Text("Deseja checar conectividade apenas do cliente selecionado ou de todos os clientes?")
+                Text(t("Deseja checar conectividade apenas do cliente selecionado ou de todos os clientes?", "Do you want to check connectivity only for the selected client or for all clients?"))
             }
             .sheet(isPresented: $showHelp) { helpSheet }
             .sheet(isPresented: $showAuditLog) { auditLogSheet }
@@ -492,8 +502,8 @@ struct ContentView: View {
                 }
                 .presentationDetents([.medium])
             }
-            .confirmationDialog("Apagar cliente?", isPresented: Binding(get: { confirmDeleteClient != nil }, set: { if !$0 { confirmDeleteClient = nil } })) {
-                Button("Apagar (cascata)", role: .destructive) {
+            .confirmationDialog(t("Apagar cliente?", "Delete client?"), isPresented: Binding(get: { confirmDeleteClient != nil }, set: { if !$0 { confirmDeleteClient = nil } })) {
+                Button(t("Apagar (cascata)", "Delete (cascade)"), role: .destructive) {
                     guard let client = confirmDeleteClient else { return }
                     store.logDeleteDecision(entityType: "client", entityName: client.name, confirmed: true)
                     do {
@@ -503,15 +513,15 @@ struct ContentView: View {
                     } catch { showErr(error) }
                     confirmDeleteClient = nil
                 }
-                Button("Cancelar", role: .cancel) {
+                Button(t("Cancelar", "Cancel"), role: .cancel) {
                     if let client = confirmDeleteClient {
                         store.logDeleteDecision(entityType: "client", entityName: client.name, confirmed: false)
                     }
                     confirmDeleteClient = nil
                 }
             }
-            .confirmationDialog("Apagar SSH?", isPresented: Binding(get: { confirmDeleteSSH != nil }, set: { if !$0 { confirmDeleteSSH = nil } })) {
-                Button("Apagar", role: .destructive) {
+            .confirmationDialog(t("Apagar SSH?", "Delete SSH?"), isPresented: Binding(get: { confirmDeleteSSH != nil }, set: { if !$0 { confirmDeleteSSH = nil } })) {
+                Button(t("Apagar", "Delete"), role: .destructive) {
                     guard let item = confirmDeleteSSH else { return }
                     store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: true)
                     do {
@@ -520,15 +530,15 @@ struct ContentView: View {
                     } catch { showErr(error) }
                     confirmDeleteSSH = nil
                 }
-                Button("Cancelar", role: .cancel) {
+                Button(t("Cancelar", "Cancel"), role: .cancel) {
                     if let item = confirmDeleteSSH {
                         store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
                     }
                     confirmDeleteSSH = nil
                 }
             }
-            .confirmationDialog("Apagar RDP?", isPresented: Binding(get: { confirmDeleteRDP != nil }, set: { if !$0 { confirmDeleteRDP = nil } })) {
-                Button("Apagar", role: .destructive) {
+            .confirmationDialog(t("Apagar RDP?", "Delete RDP?"), isPresented: Binding(get: { confirmDeleteRDP != nil }, set: { if !$0 { confirmDeleteRDP = nil } })) {
+                Button(t("Apagar", "Delete"), role: .destructive) {
                     guard let item = confirmDeleteRDP else { return }
                     store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: true)
                     do {
@@ -537,15 +547,15 @@ struct ContentView: View {
                     } catch { showErr(error) }
                     confirmDeleteRDP = nil
                 }
-                Button("Cancelar", role: .cancel) {
+                Button(t("Cancelar", "Cancel"), role: .cancel) {
                     if let item = confirmDeleteRDP {
                         store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
                     }
                     confirmDeleteRDP = nil
                 }
             }
-            .confirmationDialog("Apagar URL?", isPresented: Binding(get: { confirmDeleteURL != nil }, set: { if !$0 { confirmDeleteURL = nil } })) {
-                Button("Apagar", role: .destructive) {
+            .confirmationDialog(t("Apagar URL?", "Delete URL?"), isPresented: Binding(get: { confirmDeleteURL != nil }, set: { if !$0 { confirmDeleteURL = nil } })) {
+                Button(t("Apagar", "Delete"), role: .destructive) {
                     guard let item = confirmDeleteURL else { return }
                     store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: true)
                     do {
@@ -554,15 +564,15 @@ struct ContentView: View {
                     } catch { showErr(error) }
                     confirmDeleteURL = nil
                 }
-                Button("Cancelar", role: .cancel) {
+                Button(t("Cancelar", "Cancel"), role: .cancel) {
                     if let item = confirmDeleteURL {
                         store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
                     }
                     confirmDeleteURL = nil
                 }
             }
-            .confirmationDialog("Apagar MTK?", isPresented: Binding(get: { confirmDeleteMTK != nil }, set: { if !$0 { confirmDeleteMTK = nil } })) {
-                Button("Apagar", role: .destructive) {
+            .confirmationDialog(t("Apagar MTK?", "Delete MTK?"), isPresented: Binding(get: { confirmDeleteMTK != nil }, set: { if !$0 { confirmDeleteMTK = nil } })) {
+                Button(t("Apagar", "Delete"), role: .destructive) {
                     guard let item = confirmDeleteMTK else { return }
                     store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: true)
                     do {
@@ -571,7 +581,7 @@ struct ContentView: View {
                     } catch { showErr(error) }
                     confirmDeleteMTK = nil
                 }
-                Button("Cancelar", role: .cancel) {
+                Button(t("Cancelar", "Cancel"), role: .cancel) {
                     if let item = confirmDeleteMTK {
                         store.logDeleteDecision(entityType: "access", entityName: item.alias, confirmed: false)
                     }
@@ -600,20 +610,20 @@ struct ContentView: View {
 
             HStack(spacing: 8) {
                 Button { showAddClient = true } label: {
-                    Label("Novo Cliente", systemImage: "plus")
+                    Label(t("Novo Cliente", "New Client"), systemImage: "plus")
                 }
                 .buttonStyle(.borderedProminent)
                 .keyboardShortcut("n", modifiers: [.command])
 
                 Button {
                     guard selectedClient != nil else {
-                        showErrText("Selecione um cliente antes de criar um acesso.")
+                        showErrText(t("Selecione um cliente antes de criar um acesso.", "Select a client before creating an access."))
                         return
                     }
                     store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=botão principal")
                     openAddAccessForm(preferred: .ssh)
                 } label: {
-                    Label("Novo Acesso", systemImage: "plus.circle")
+                    Label(t("Novo Acesso", "New Access"), systemImage: "plus.circle")
                 }
                 .buttonStyle(.bordered)
                 .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -668,13 +678,6 @@ struct ContentView: View {
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(t("Arquivos", "Files")).font(.caption).foregroundStyle(.secondary)
-                Text(store.clientsPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                Text(store.acessosPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                Text(store.eventosPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-            }
-
             Text(t("Desenvolvido por Solutions", "Developed by Solutions"))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
@@ -690,7 +693,7 @@ struct ContentView: View {
         VStack(spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(selectedClient?.name ?? "Visão Geral")
+                    Text(selectedClient?.name ?? t("Visão Geral", "Overview"))
                         .font(.title)
                         .bold()
                     Text(t("Conexões SSH, RDP e URL/MTK", "SSH, RDP and URL/MTK connections"))
@@ -722,9 +725,9 @@ struct ContentView: View {
                     }
 
                     HStack(spacing: 10) {
-                        Picker("Filtro", selection: $connectivityFilter) {
-                            ForEach(ConnectivityFilter.allCases, id: \ .self) { item in
-                                Text(item.rawValue).tag(item)
+                        Picker(t("Filtro", "Filter"), selection: $connectivityFilter) {
+                            ForEach(ConnectivityFilter.allCases, id: \.self) { item in
+                                Text(connectivityFilterLabel(item)).tag(item)
                             }
                         }
                         .pickerStyle(.segmented)
@@ -795,7 +798,7 @@ struct ContentView: View {
 
                     if let lastConnectivityCheck {
                         HStack {
-                            Text("Última checagem: \(lastConnectivityCheck.formatted(date: .abbreviated, time: .standard))")
+                            Text("\(t("Última checagem", "Last check")): \(lastConnectivityCheck.formatted(date: .abbreviated, time: .standard))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -827,7 +830,7 @@ struct ContentView: View {
 
                         if let scanStartedAt {
                             HStack {
-                                Text("Início: \(scanStartedAt.formatted(date: .omitted, time: .standard))")
+                                Text("\(t("Início", "Start")): \(scanStartedAt.formatted(date: .omitted, time: .standard))")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                 Spacer()
@@ -835,7 +838,7 @@ struct ContentView: View {
                         }
                     } else if let scanStartedAt, let scanEndedAt, let scanDurationSeconds {
                         HStack {
-                            Text("Última varredura: início \(scanStartedAt.formatted(date: .omitted, time: .standard)) — fim \(scanEndedAt.formatted(date: .omitted, time: .standard)) — duração \(formatDuration(seconds: scanDurationSeconds))")
+                            Text("\(t("Última varredura", "Last scan")): \(t("início", "start")) \(scanStartedAt.formatted(date: .omitted, time: .standard)) — \(t("fim", "end")) \(scanEndedAt.formatted(date: .omitted, time: .standard)) — \(t("duração", "duration")) \(formatDuration(seconds: scanDurationSeconds))")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                             Spacer()
@@ -883,18 +886,18 @@ struct ContentView: View {
                         }
                         .width(min: 140, ideal: 220)
 
-                        TableColumn("Porta", value: \.portValue) { item in
+                        TableColumn(t("Porta", "Port"), value: \.portValue) { item in
                             Text(item.portLabel)
                         }
                         .width(min: 60, ideal: 80, max: 120)
 
-                        TableColumn("Usuário/URL", value: \.principal) { item in
+                        TableColumn(t("Usuário/URL", "User/URL"), value: \.principal) { item in
                             Text(item.principal)
                                 .lineLimit(1)
                         }
                         .width(min: 160, ideal: 280)
 
-                        TableColumn("Método", value: \.method) { item in
+                        TableColumn(t("Método", "Method"), value: \.method) { item in
                             Text(item.method)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -908,7 +911,7 @@ struct ContentView: View {
                         }
                         .width(min: 56, ideal: 70, max: 120)
 
-                        TableColumn("Erro", value: \.error) { item in
+                        TableColumn(t("Erro", "Error"), value: \.error) { item in
                             Text(item.error)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
@@ -926,9 +929,9 @@ struct ContentView: View {
                     )
                     .contextMenu {
                         let target = selectedAccessRow
-                        Button("Novo Acesso") {
+                        Button(t("Novo Acesso", "New Access")) {
                             guard selectedClient != nil else {
-                                showErrText("Selecione um cliente antes de criar um acesso.")
+                                showErrText(t("Selecione um cliente antes de criar um acesso.", "Select a client before creating an access."))
                                 return
                             }
                             store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=context menu grid acessos")
@@ -936,13 +939,13 @@ struct ContentView: View {
                         }
                         if let target {
                             Divider()
-                            Button("Abrir") { open(row: target) }
-                            Button("Checar este acesso") { checkSingleAccessConnectivity(row: target) }
-                            Button("Checar cliente deste acesso") { checkClientConnectivity(for: target) }
-                            Button(target.isFavorite ? "Desfavoritar" : "Favoritar") { toggleFavorite(row: target) }
-                            Button("Clonar") { clone(row: target) }
-                            Button("Editar") { edit(row: target) }
-                            Button("Excluir", role: .destructive) { delete(row: target) }
+                            Button(t("Abrir", "Open")) { open(row: target) }
+                            Button(t("Checar este acesso", "Check this access")) { checkSingleAccessConnectivity(row: target) }
+                            Button(t("Checar cliente deste acesso", "Check this access client")) { checkClientConnectivity(for: target) }
+                            Button(target.isFavorite ? t("Desfavoritar", "Unfavorite") : t("Favoritar", "Favorite")) { toggleFavorite(row: target) }
+                            Button(t("Clonar", "Clone")) { clone(row: target) }
+                            Button(t("Editar", "Edit")) { edit(row: target) }
+                            Button(t("Excluir", "Delete"), role: .destructive) { delete(row: target) }
                         }
                     }
                 }
@@ -1245,7 +1248,7 @@ struct ContentView: View {
     private func doExportCSVs(to directoryURL: URL) {
         do {
             try store.exportCSVs(to: directoryURL)
-            showInfoText("Exportação concluída em: \(directoryURL.path)")
+            showInfoText("\(t("Exportação concluída em", "Export completed at")): \(directoryURL.path)")
         } catch {
             showErr(error)
         }
@@ -1257,8 +1260,8 @@ struct ContentView: View {
         panel.canChooseFiles = true
         panel.allowedContentTypes = [.commaSeparatedText]
         panel.allowsMultipleSelection = true
-        panel.prompt = "Importar"
-        panel.message = "Selecione clientes.csv e acessos.csv (eventos.csv é opcional)."
+        panel.prompt = t("Importar", "Import")
+        panel.message = t("Selecione clientes.csv e acessos.csv (eventos.csv é opcional).", "Select clientes.csv and acessos.csv (eventos.csv is optional).")
 
         guard panel.runModal() == .OK else { return }
 
@@ -1282,7 +1285,7 @@ struct ContentView: View {
             try store.restoreLatestBackup()
             logs.reload()
             showScanBanner = true
-            scanBannerMessage = "Backup restaurado com sucesso."
+            scanBannerMessage = t("Backup restaurado com sucesso.", "Backup restored successfully.")
             store.logUIAction(action: "restore_backup", entityName: "Backups", details: "Restaurado: \(store.latestBackupName() ?? "")")
         } catch {
             showErr(error)
@@ -1293,7 +1296,7 @@ struct ContentView: View {
         NavigationStack {
             VStack(spacing: 10) {
                 HStack {
-                    Text(importPreviewHasErrors ? "Prévia de importação — erros" : "Prévia de importação")
+                    Text(importPreviewHasErrors ? t("Prévia de importação — erros", "Import preview — errors") : t("Prévia de importação", "Import preview"))
                         .font(.headline)
                     Spacer()
                 }
@@ -1313,18 +1316,18 @@ struct ContentView: View {
                         Button("OK") { showImportPreviewSheet = false }
                             .buttonStyle(.borderedProminent)
                     } else {
-                        Button("Cancelar") {
+                        Button(t("Cancelar", "Cancel")) {
                             store.logUIAction(action: "import_cancelled", entityName: "Importação", details: "Cancelado após prévia")
                             showImportPreviewSheet = false
                         }
                         Spacer()
-                        Button("Importar") {
+                        Button(t("Importar", "Import")) {
                             do {
                                 try store.importCSVs(from: importPreviewURLs)
                                 logs.reload()
                                 bannerIsError = false
                                 showScanBanner = true
-                                scanBannerMessage = "Importação concluída com sucesso."
+                                scanBannerMessage = t("Importação concluída com sucesso.", "Import completed successfully.")
                             } catch {
                                 showErr(error)
                             }
@@ -1339,7 +1342,7 @@ struct ContentView: View {
             .padding(.top, 8)
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    Button("Fechar") { showImportPreviewSheet = false }
+                    Button(t("Fechar", "Close")) { showImportPreviewSheet = false }
                 }
             }
         }
@@ -1351,48 +1354,48 @@ struct ContentView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("MenuProUI-MAC - Ajuda")
+                        Text(t("MenuProUI-MAC - Ajuda", "MenuProUI-MAC - Help"))
                         .font(.title2)
                         .bold()
 
-                    Text("Atalhos de teclado")
+                    Text(t("Atalhos de teclado", "Keyboard shortcuts"))
                         .font(.headline)
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("⌘R  — Atualizar dados")
-                        Text("⌘K  — Focar busca global")
-                        Text("⌘F  — Focar busca de clientes")
-                        Text("⇧⌘F — Focar busca de acessos")
-                        Text("⌘L  — Limpar buscas")
-                        Text("⌘N  — Novo Cliente")
-                        Text("⇧⌘N — Novo Acesso")
-                        Text("⇧⌘D — Clonar acesso selecionado")
-                        Text("⇧⌘K — Checar conectividade")
-                        Text("⇧⌘B — Exportar CSVs")
-                        Text("⇧⌘I — Importar CSVs")
-                        Text("⌥⌘J — Exibir auditoria de eventos")
-                        Text("↩︎   — Abrir acesso selecionado")
-                        Text("⌘E  — Editar acesso selecionado")
-                        Text("Botão Favoritar — alterna favorito do acesso selecionado")
-                        Text("⌫   — Excluir acesso selecionado")
-                        Text("⌘/ ou F1 — Abrir Ajuda")
-                        Text("No formulário \"Novo acesso\":")
-                        Text("Campo Tipo: SSH, RDP, URL ou MTK")
-                        Text("Esc  — Cancelar")
+                        Text(t("⌘R  — Atualizar dados", "⌘R  — Refresh data"))
+                        Text(t("⌘K  — Focar busca global", "⌘K  — Focus global search"))
+                        Text(t("⌘F  — Focar busca de clientes", "⌘F  — Focus client search"))
+                        Text(t("⇧⌘F — Focar busca de acessos", "⇧⌘F — Focus access search"))
+                        Text(t("⌘L  — Limpar buscas", "⌘L  — Clear searches"))
+                        Text(t("⌘N  — Novo Cliente", "⌘N  — New Client"))
+                        Text(t("⇧⌘N — Novo Acesso", "⇧⌘N — New Access"))
+                        Text(t("⇧⌘D — Clonar acesso selecionado", "⇧⌘D — Clone selected access"))
+                        Text(t("⇧⌘K — Checar conectividade", "⇧⌘K — Check connectivity"))
+                        Text(t("⇧⌘B — Exportar CSVs", "⇧⌘B — Export CSVs"))
+                        Text(t("⇧⌘I — Importar CSVs", "⇧⌘I — Import CSVs"))
+                        Text(t("⌥⌘J — Exibir auditoria de eventos", "⌥⌘J — Show event audit log"))
+                        Text(t("↩︎   — Abrir acesso selecionado", "↩︎   — Open selected access"))
+                        Text(t("⌘E  — Editar acesso selecionado", "⌘E  — Edit selected access"))
+                        Text(t("Botão Favoritar — alterna favorito do acesso selecionado", "Favorite button — toggle favorite on selected access"))
+                        Text(t("⌫   — Excluir acesso selecionado", "⌫   — Delete selected access"))
+                        Text(t("⌘/ ou F1 — Abrir Ajuda", "⌘/ or F1 — Open Help"))
+                        Text(t("No formulário \"Novo acesso\":", "In the \"New access\" form:"))
+                        Text(t("Campo Tipo: SSH, RDP, URL ou MTK", "Type field: SSH, RDP, URL or MTK"))
+                        Text(t("Esc  — Cancelar", "Esc  — Cancel"))
                     }
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                    Text("Armazenamento").font(.headline)
-                    Text("Pasta base: \(CSVStore.dataDirectoryURL.path)")
+                    Text(t("Armazenamento", "Storage")).font(.headline)
+                    Text(t("Pasta base", "Base folder") + ": \(CSVStore.dataDirectoryURL.path)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Clientes: \(store.clientsPath)")
+                    Text(t("Clientes", "Clients") + ": \(store.clientsPath)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Acessos: \(store.acessosPath)")
+                    Text(t("Acessos", "Accesses") + ": \(store.acessosPath)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text("Eventos: \(store.eventosPath)")
+                    Text(t("Eventos", "Events") + ": \(store.eventosPath)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -1401,7 +1404,7 @@ struct ContentView: View {
             }
             .toolbar {
                 ToolbarItem(placement: .automatic) {
-                    Button("Fechar") { showHelp = false }
+                    Button(t("Fechar", "Close")) { showHelp = false }
                 }
             }
         }
@@ -1413,24 +1416,24 @@ struct ContentView: View {
             VStack(spacing: 10) {
                 VStack(spacing: 8) {
                     HStack(spacing: 10) {
-                        TextField("Buscar (ação, entidade, detalhes)...", text: $auditSearchText)
+                        TextField(t("Buscar (ação, entidade, detalhes)...", "Search (action, entity, details)..."), text: $auditSearchText)
                             .textFieldStyle(.roundedBorder)
                         Spacer(minLength: 0)
                     }
 
                     HStack(spacing: 10) {
-                        Picker("Ação", selection: $auditActionFilter) {
+                        Picker(t("Ação", "Action"), selection: $auditActionFilter) {
                             ForEach(auditActions, id: \ .self) { Text($0).tag($0) }
                         }
                         .frame(width: 220)
 
-                        Picker("Entidade", selection: $auditEntityFilter) {
+                        Picker(t("Entidade", "Entity"), selection: $auditEntityFilter) {
                             ForEach(auditEntities, id: \ .self) { Text($0).tag($0) }
                         }
                         .frame(width: 220)
 
                         if let selectedClient {
-                            Button("Cliente selecionado") {
+                            Button(t("Cliente selecionado", "Selected client")) {
                                 auditSearchText = selectedClient.name
                                 if auditEntities.contains("client") { auditEntityFilter = "client" }
                             }
@@ -1438,7 +1441,7 @@ struct ContentView: View {
                         }
 
                         if let row = selectedAccessRow {
-                            Button("Acesso selecionado") {
+                            Button(t("Acesso selecionado", "Selected access")) {
                                 auditSearchText = row.alias
                                 if auditEntities.contains("access") { auditEntityFilter = "access" }
                             }
@@ -1478,7 +1481,7 @@ struct ContentView: View {
                     .disabled(isVerifyingAuditIntegrity)
                 }
                 ToolbarItem(placement: .automatic) {
-                    Button("Fechar") { showAuditLog = false }
+                    Button(t("Fechar", "Close")) { showAuditLog = false }
                 }
             }
             .onAppear {
@@ -1825,7 +1828,7 @@ struct ContentView: View {
         guard !rows.isEmpty else { return }
 
         guard !isCheckingConnectivity else {
-            showInfoText("Já existe uma varredura de conectividade em andamento.")
+            showInfoText(t("Já existe uma varredura de conectividade em andamento.", "A connectivity scan is already running."))
             return
         }
 
@@ -1843,7 +1846,7 @@ struct ContentView: View {
         guard !rows.isEmpty else { return }
 
         guard !isCheckingConnectivity else {
-            showInfoText("Já existe uma varredura de conectividade em andamento.")
+            showInfoText(t("Já existe uma varredura de conectividade em andamento.", "A connectivity scan is already running."))
             return
         }
 
@@ -1853,7 +1856,7 @@ struct ContentView: View {
 
     private func checkSingleAccessConnectivity(row: AccessRow) {
         guard !isCheckingConnectivity else {
-            showInfoText("Já existe uma varredura de conectividade em andamento.")
+            showInfoText(t("Já existe uma varredura de conectividade em andamento.", "A connectivity scan is already running."))
             return
         }
         store.logConnectivityCheck(scope: "acesso:\(row.alias)", rowCount: 1)
@@ -1864,7 +1867,7 @@ struct ContentView: View {
         let rows = allRows(for: row.clientId)
         guard !rows.isEmpty else { return }
         guard !isCheckingConnectivity else {
-            showInfoText("Já existe uma varredura de conectividade em andamento.")
+            showInfoText(t("Já existe uma varredura de conectividade em andamento.", "A connectivity scan is already running."))
             return
         }
         store.logConnectivityCheck(scope: "cliente:\(row.clientName)", rowCount: rows.count)
@@ -1878,7 +1881,7 @@ struct ContentView: View {
 
     private func openAddAccessForm(preferred: AccessKind) {
         guard selectedClient != nil else {
-            showErrText("Selecione um cliente antes de criar um acesso.")
+            showErrText(t("Selecione um cliente antes de criar um acesso.", "Select a client before creating an access."))
             return
         }
         addAccessInitialKind = preferred
@@ -1923,9 +1926,9 @@ struct ContentView: View {
 
         let startMessage: String
         if ConnectivityChecker.hasNmap {
-            startMessage = "Checando \(scopeName) em background. nmap: \(ConnectivityChecker.nmapPathDescription)"
+            startMessage = "\(t("Checando", "Checking")) \(scopeName) \(t("em background", "in background")). nmap: \(ConnectivityChecker.nmapPathDescription)"
         } else {
-            startMessage = "Checando \(scopeName) em background. nmap não encontrado (\(ConnectivityChecker.nmapPathDescription)) — usando TCP nativo"
+            startMessage = "\(t("Checando", "Checking")) \(scopeName) \(t("em background", "in background")). \(t("nmap não encontrado", "nmap not found")) (\(ConnectivityChecker.nmapPathDescription)) — \(t("usando TCP nativo", "using native TCP"))"
         }
 
         let ttl = max(0, connectivityCacheTTLSeconds)
@@ -2071,7 +2074,7 @@ struct ContentView: View {
                     if let started = scanStartedAt, let ended = scanEndedAt {
                         scanDurationSeconds = max(0, ended.timeIntervalSince(started))
                     }
-                    scanBannerMessage = "Varredura cancelada (\(scopeName))."
+                    scanBannerMessage = "\(t("Varredura cancelada", "Scan cancelled")) (\(scopeName))."
                     showScanBanner = true
                 }
                 return
@@ -2106,7 +2109,7 @@ struct ContentView: View {
                 }
                 let onlineCount = rows.filter { connectivityState(for: $0.id) == .online }.count
                 let offlineCount = rows.count - onlineCount
-                scanBannerMessage = "Concluído (\(scopeName)): \(onlineCount) online, \(offlineCount) offline."
+                scanBannerMessage = "\(t("Concluído", "Completed")) (\(scopeName)): \(onlineCount) \(t("online", "online")), \(offlineCount) \(t("offline", "offline"))."
                 showScanBanner = true
                 store.logUIAction(action: "check_connectivity_completed", entityName: "Conectividade", details: "Escopo=\(scopeName); Online=\(onlineCount); Offline=\(offlineCount)")
             }
@@ -2129,7 +2132,7 @@ struct ContentView: View {
         for row in lastConnectivityRows where accessConnectivity[row.id] == .checking {
             accessConnectivity[row.id] = .unknown
         }
-        scanBannerMessage = "Varredura cancelada pelo usuário."
+        scanBannerMessage = t("Varredura cancelada pelo usuário.", "Scan cancelled by user.")
         showScanBanner = true
         store.logUIAction(action: "check_connectivity_cancelled", entityName: "Conectividade", details: "Varredura cancelada manualmente")
     }

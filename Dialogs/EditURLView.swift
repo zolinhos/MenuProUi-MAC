@@ -6,6 +6,7 @@ import SwiftUI
 /// A URL é parseada em scheme/host/port/path ao salvar.
 struct EditURLView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("app.language") private var appLanguageRaw = AppLanguage.pt.rawValue
 
     /// Acesso URL sendo editado (cópia local mutável).
     @State var item: URLAccess
@@ -27,6 +28,8 @@ struct EditURLView: View {
     @State private var isTestingURL = false
     @State private var urlTestResultText: String = ""
     @State private var urlTestResultIsOnline: Bool?
+    private var appLanguage: AppLanguage { .from(appLanguageRaw) }
+    private func t(_ pt: String, _ en: String) -> String { I18n.text(pt, en, language: appLanguage) }
 
     /// URL parseada em componentes (scheme, host, port, path).
     private var parsed: (scheme: String, host: String, port: Int, path: String) {
@@ -45,11 +48,11 @@ struct EditURLView: View {
     /// Retorna mensagem de erro se a URL é inválida, ou nil se está ok.
     private var urlValidationError: String? {
         let raw = urlText.trimmed
-        if raw.isEmpty { return "Informe uma URL" }
+        if raw.isEmpty { return t("Informe uma URL", "Enter a URL") }
         let normalized = normalizedURLInput(raw)
-        guard let comps = URLComponents(string: normalized) else { return "URL inválida" }
+        guard let comps = URLComponents(string: normalized) else { return t("URL inválida", "Invalid URL") }
         if (comps.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Host ausente na URL"
+            return t("Host ausente na URL", "Missing host in URL")
         }
         return nil
     }
@@ -71,15 +74,15 @@ struct EditURLView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Editar URL").font(.title2).bold()
+            Text(t("Editar URL", "Edit URL")).font(.title2).bold()
 
             Form {
-                TextField("Alias", text: $item.alias)
+                TextField(t("Alias", "Alias"), text: $item.alias)
                 // ClientId — somente leitura
-                Text("Cliente: \(item.clientId)").foregroundStyle(.secondary)
+                Text("\(t("Cliente", "Client")): \(item.clientId)").foregroundStyle(.secondary)
 
-                TextField("Nome", text: $item.name)
-                TextField("URL completa", text: $urlText)
+                TextField(t("Nome", "Name"), text: $item.name)
+                TextField(t("URL completa", "Full URL"), text: $urlText)
 
                 // Exibe erro de validação ou prévia da URL final
                 if let urlValidationError {
@@ -87,14 +90,14 @@ struct EditURLView: View {
                         .font(.caption)
                         .foregroundStyle(.red)
                 } else if !finalURLPreview.isEmpty {
-                    Text("URL final: \(finalURLPreview)")
+                    Text("\(t("URL final", "Final URL")): \(finalURLPreview)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
 
                 if !lastTestedURL.isEmpty {
-                    Text("Última URL testada (sessão): \(lastTestedURL)")
+                    Text("\(t("Última URL testada (sessão)", "Last tested URL (session)")): \(lastTestedURL)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
@@ -102,7 +105,7 @@ struct EditURLView: View {
 
                 // Botão de teste de conectividade inline
                 HStack {
-                    Button(isTestingURL ? "Testando..." : "Testar URL") {
+                    Button(isTestingURL ? t("Testando...", "Testing...") : t("Testar URL", "Test URL")) {
                         testURLNow()
                     }
                     .buttonStyle(.bordered)
@@ -117,11 +120,11 @@ struct EditURLView: View {
                     Spacer()
                 }
 
-                TextField("Tags", text: $item.tags)
+                TextField(t("Tags", "Tags"), text: $item.tags)
 
                 // Observações — campo multi-linha (consistente com AddURLView)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Observações")
+                    Text(t("Observações", "Notes"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     TextEditor(text: $item.notes)
@@ -130,9 +133,9 @@ struct EditURLView: View {
             }
 
             HStack {
-                Button("Cancelar") { dismiss() }
+                Button(t("Cancelar", "Cancel")) { dismiss() }
                 Spacer()
-                Button("Salvar") {
+                Button(t("Salvar", "Save")) {
                     let parsed = parsed
                     item.scheme = parsed.scheme
                     item.host = parsed.host
@@ -222,14 +225,14 @@ struct EditURLView: View {
                 isTestingURL = false
                 guard let result else {
                     urlTestResultIsOnline = false
-                    urlTestResultText = "Falha ao testar"
+                    urlTestResultText = t("Falha ao testar", "Failed to test")
                     return
                 }
                 urlTestResultIsOnline = result.isOnline
                 if result.isOnline {
                     urlTestResultText = "Online (\(result.method.rawValue)) \(max(0, result.durationMs))ms"
                 } else {
-                    urlTestResultText = "Offline: \(result.errorDetail)"
+                    urlTestResultText = "\(t("Offline", "Offline")): \(result.errorDetail)"
                 }
             }
         }

@@ -24,6 +24,7 @@ struct AddRDPPayload {
 /// Exige preenchimento de alias, nome, host e usuário.
 struct AddRDPView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("app.language") private var appLanguageRaw = AppLanguage.pt.rawValue
 
     let clients: [Client]
     /// Cliente pré-selecionado na lista lateral.
@@ -44,52 +45,54 @@ struct AddRDPView: View {
     @State private var widthText = ""
     @State private var heightText = ""
     @State private var notes = ""
+    private var appLanguage: AppLanguage { .from(appLanguageRaw) }
+    private func t(_ pt: String, _ en: String) -> String { I18n.text(pt, en, language: appLanguage) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Cadastrar RDP").font(.title2).bold()
+            Text(t("Cadastrar RDP", "Add RDP")).font(.title2).bold()
 
             Form {
-                Picker("Cliente", selection: $clientId) {
-                    Text("Selecione...").tag("")
+                Picker(t("Cliente", "Client"), selection: $clientId) {
+                    Text(t("Selecione...", "Select...")).tag("")
                     ForEach(clients, id: \.id) { c in
                         Text("\(c.name) (\(c.id))").tag(c.id)
                     }
                 }
 
-                TextField("Alias (ex: scma-rdp01)", text: $alias)
-                TextField("Nome do servidor", text: $name)
-                TextField("Host/IP", text: $host)
+                TextField(t("Alias (ex: scma-rdp01)", "Alias (e.g. scma-rdp01)"), text: $alias)
+                TextField(t("Nome do servidor", "Server name"), text: $name)
+                TextField(t("Host/IP", "Host/IP"), text: $host)
 
-                TextField("Porta (padrão 3389)", text: $portText)
+                TextField(t("Porta (padrão 3389)", "Port (default 3389)"), text: $portText)
 
-                TextField("Domínio (opcional)", text: $domain)
-                TextField("Usuário", text: $user)
-                TextField("Tags (opcional)", text: $tags)
-                Toggle("Ignorar certificado", isOn: $ignoreCert)
-                Toggle("Tela cheia", isOn: $fullScreen)
-                Toggle("Resolução dinâmica", isOn: $dynamicResolution)
-                TextField("Largura (opcional)", text: $widthText)
+                TextField(t("Domínio (opcional)", "Domain (optional)"), text: $domain)
+                TextField(t("Usuário", "User"), text: $user)
+                TextField(t("Tags (opcional)", "Tags (optional)"), text: $tags)
+                Toggle(t("Ignorar certificado", "Ignore certificate"), isOn: $ignoreCert)
+                Toggle(t("Tela cheia", "Full screen"), isOn: $fullScreen)
+                Toggle(t("Resolução dinâmica", "Dynamic resolution"), isOn: $dynamicResolution)
+                TextField(t("Largura (opcional)", "Width (optional)"), text: $widthText)
                     .disabled(dynamicResolution)
-                TextField("Altura (opcional)", text: $heightText)
+                TextField(t("Altura (opcional)", "Height (optional)"), text: $heightText)
                     .disabled(dynamicResolution)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Observações (opcional)")
+                    Text(t("Observações (opcional)", "Notes (optional)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     TextEditor(text: $notes)
                         .frame(minHeight: 90)
                 }
 
-                Text("Obs: porta fora do padrão é gravada no .rdp via server port:i:PORT.")
+                Text(t("Obs: porta fora do padrão é gravada no .rdp via server port:i:PORT.", "Note: non-default port is saved in .rdp via server port:i:PORT."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             HStack {
-                Button("Cancelar") { dismiss() }
+                Button(t("Cancelar", "Cancel")) { dismiss() }
                 Spacer()
-                Button("Salvar") {
+                Button(t("Salvar", "Save")) {
                     let p = Int(portText.trimmed) ?? 3389
                     onSave(.init(
                         alias: alias.trimmed,

@@ -6,6 +6,7 @@ import SwiftUI
 /// Inclui teste de conectividade inline usando ConnectivityChecker.
 struct AddURLView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("app.language") private var appLanguageRaw = AppLanguage.pt.rawValue
 
     let clients: [Client]
     /// Cliente pré-selecionado na lista lateral.
@@ -26,6 +27,8 @@ struct AddURLView: View {
     @State private var isTestingURL = false
     @State private var urlTestResultText: String = ""
     @State private var urlTestResultIsOnline: Bool?
+    private var appLanguage: AppLanguage { .from(appLanguageRaw) }
+    private func t(_ pt: String, _ en: String) -> String { I18n.text(pt, en, language: appLanguage) }
 
     private var parsed: (scheme: String, host: String, port: Int, path: String) {
         parseURL(urlText.trimmed)
@@ -41,52 +44,52 @@ struct AddURLView: View {
 
     private var urlValidationError: String? {
         let raw = urlText.trimmed
-        if raw.isEmpty { return "Informe uma URL" }
+        if raw.isEmpty { return t("Informe uma URL", "Enter a URL") }
         let normalized = normalizedURLInput(raw)
-        guard let comps = URLComponents(string: normalized) else { return "URL inválida" }
+        guard let comps = URLComponents(string: normalized) else { return t("URL inválida", "Invalid URL") }
         if (comps.host ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Host ausente na URL"
+            return t("Host ausente na URL", "Missing host in URL")
         }
         return nil
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Cadastrar URL").font(.title2).bold()
+            Text(t("Cadastrar URL", "Add URL")).font(.title2).bold()
 
             Form {
-                Picker("Cliente", selection: $clientId) {
-                    Text("Selecione...").tag("")
+                Picker(t("Cliente", "Client"), selection: $clientId) {
+                    Text(t("Selecione...", "Select...")).tag("")
                     ForEach(clients, id: \.id) { c in
                         Text("\(c.name) (\(c.id))").tag(c.id)
                     }
                 }
 
-                TextField("Alias (ex: fw-web01)", text: $alias)
-                TextField("Nome (ex: Firewall / VMware)", text: $name)
+                TextField(t("Alias (ex: fw-web01)", "Alias (e.g. fw-web01)"), text: $alias)
+                TextField(t("Nome (ex: Firewall / VMware)", "Name (e.g. Firewall / VMware)"), text: $name)
 
-                TextField("URL completa (ex: http://firewall...:4444)", text: $urlText)
+                TextField(t("URL completa (ex: http://firewall...:4444)", "Full URL (e.g. http://firewall...:4444)"), text: $urlText)
 
                 if let urlValidationError {
                     Text(urlValidationError)
                         .font(.caption)
                         .foregroundStyle(.red)
                 } else if !finalURLPreview.isEmpty {
-                    Text("URL final: \(finalURLPreview)")
+                    Text("\(t("URL final", "Final URL")): \(finalURLPreview)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
 
                 if !lastTestedURL.isEmpty {
-                    Text("Última URL testada (sessão): \(lastTestedURL)")
+                    Text("\(t("Última URL testada (sessão)", "Last tested URL (session)")): \(lastTestedURL)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
                 }
 
                 HStack {
-                    Button(isTestingURL ? "Testando..." : "Testar URL") {
+                    Button(isTestingURL ? t("Testando...", "Testing...") : t("Testar URL", "Test URL")) {
                         testURLNow()
                     }
                     .buttonStyle(.bordered)
@@ -101,24 +104,24 @@ struct AddURLView: View {
                     Spacer()
                 }
 
-                TextField("Tags (opcional)", text: $tags)
+                TextField(t("Tags (opcional)", "Tags (optional)"), text: $tags)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Observações (opcional)")
+                    Text(t("Observações (opcional)", "Notes (optional)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     TextEditor(text: $notes)
                         .frame(minHeight: 90)
                 }
 
-                Text("Se não informar esquema, será assumido http://")
+                Text(t("Se não informar esquema, será assumido http://", "If scheme is omitted, http:// will be assumed"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             HStack {
-                Button("Cancelar") { dismiss() }
+                Button(t("Cancelar", "Cancel")) { dismiss() }
                 Spacer()
-                Button("Salvar") {
+                Button(t("Salvar", "Save")) {
                     let parsed = parsed
                     onSave(URLAccess(
                         alias: alias.trimmed,
@@ -221,14 +224,14 @@ struct AddURLView: View {
                 isTestingURL = false
                 guard let result else {
                     urlTestResultIsOnline = false
-                    urlTestResultText = "Falha ao testar"
+                    urlTestResultText = t("Falha ao testar", "Failed to test")
                     return
                 }
                 urlTestResultIsOnline = result.isOnline
                 if result.isOnline {
                     urlTestResultText = "Online (\(result.method.rawValue)) \(max(0, result.durationMs))ms"
                 } else {
-                    urlTestResultText = "Offline: \(result.errorDetail)"
+                    urlTestResultText = "\(t("Offline", "Offline")): \(result.errorDetail)"
                 }
             }
         }

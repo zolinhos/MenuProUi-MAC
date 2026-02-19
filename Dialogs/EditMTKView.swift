@@ -2,10 +2,14 @@ import SwiftUI
 
 struct EditMTKView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("app.language") private var appLanguageRaw = AppLanguage.pt.rawValue
 
     @State var item: MTKAccess
     let onSave: (MTKAccess) -> Void
     @State private var portText: String
+
+    private var appLanguage: AppLanguage { .from(appLanguageRaw) }
+    private func t(_ pt: String, _ en: String) -> String { I18n.text(pt, en, language: appLanguage) }
 
     init(item: MTKAccess, onSave: @escaping (MTKAccess) -> Void) {
         self._item = State(initialValue: item)
@@ -22,20 +26,20 @@ struct EditMTKView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Editar MTK (WinBox)").font(.title2).bold()
+            Text(t("Editar MTK (WinBox)", "Edit MTK (WinBox)")).font(.title2).bold()
 
             Form {
-                TextField("Alias", text: $item.alias)
-                Text("Cliente: \(item.clientId)").foregroundStyle(.secondary)
+                TextField(t("Alias", "Alias"), text: $item.alias)
+                Text("\(t("Cliente", "Client")): \(item.clientId)").foregroundStyle(.secondary)
 
-                TextField("Nome", text: $item.name)
-                TextField("Host/IP", text: $item.host)
-                TextField("Porta", text: $portText)
-                TextField("Usuário", text: $item.user)
-                TextField("Tags", text: $item.tags)
+                TextField(t("Nome", "Name"), text: $item.name)
+                TextField(t("Host/IP", "Host/IP"), text: $item.host)
+                TextField(t("Porta", "Port"), text: $portText)
+                TextField(t("Usuário", "User"), text: $item.user)
+                TextField(t("Tags", "Tags"), text: $item.tags)
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Observações")
+                    Text(t("Observações", "Notes"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     TextEditor(text: $item.notes)
@@ -44,9 +48,9 @@ struct EditMTKView: View {
             }
 
             HStack {
-                Button("Cancelar") { dismiss() }
+                Button(t("Cancelar", "Cancel")) { dismiss() }
                 Spacer()
-                Button("Salvar") {
+                Button(t("Salvar", "Save")) {
                     item.port = Int(portText.trimmed) ?? item.port
                     onSave(item)
                     dismiss()
