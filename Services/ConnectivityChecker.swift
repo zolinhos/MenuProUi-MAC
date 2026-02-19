@@ -285,7 +285,53 @@ enum ConnectivityChecker {
             resolveNote = "RESOLVED: host=\(endpoint.host) -> ip=\(resolved)"
         }
 
-        if row.kind == .ssh || row.kind == .rdp || row.kind == .mtk {
+        if row.kind == .mtk {
+            // MTK/WinBox: prioriza TCP direto na porta 8291 para evitar falso offline
+            // quando nmap diverge em alguns ambientes locais.
+            let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
+            if tcp.ok {
+                end = Date()
+                return CheckResult(
+                    isOnline: true,
+                    method: .tcp,
+                    effectivePort: endpoint.port,
+                    durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                    checkedAt: end,
+                    failureKind: nil,
+                    failureMessage: nil,
+                    toolOutput: nil
+                )
+            }
+
+            let ncProbe = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
+            if ncProbe.ok {
+                end = Date()
+                return CheckResult(
+                    isOnline: true,
+                    method: .nc,
+                    effectivePort: endpoint.port,
+                    durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                    checkedAt: end,
+                    failureKind: nil,
+                    failureMessage: nil,
+                    toolOutput: ncProbe.output
+                )
+            }
+
+            end = Date()
+            return CheckResult(
+                isOnline: false,
+                method: .tcp,
+                effectivePort: endpoint.port,
+                durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                checkedAt: end,
+                failureKind: tcp.failureKind,
+                failureMessage: tcp.failureMessage,
+                toolOutput: ncProbe.output
+            )
+        }
+
+        if row.kind == .ssh || row.kind == .rdp {
             if hasNmap {
                 let nmap = await checkWithNmapDetailed(host: probeHost, ports: [endpoint.port], timeout: timeout)
                 let tcp = await checkTCPDetailed(host: probeHost, port: nmap.openPort ?? endpoint.port, timeout: max(1.0, min(timeout, 2.5)))
