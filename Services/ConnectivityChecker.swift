@@ -338,15 +338,49 @@ enum ConnectivityChecker {
 
                 if nmap.ok == tcp.ok {
                     end = Date()
+                    if nmap.ok {
+                        return CheckResult(
+                            isOnline: true,
+                            method: .nmap,
+                            effectivePort: nmap.openPort ?? endpoint.port,
+                            durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                            checkedAt: end,
+                            failureKind: nil,
+                            failureMessage: nil,
+                            toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [])
+                        )
+                    }
+
+                    // Mesmo com nmap+tpc concordando em offline, validamos com nc para reduzir falso negativo local.
+                    let ncConfirm = await checkWithNcDetailed(host: probeHost, port: endpoint.port)
+                    end = Date()
+                    if ncConfirm.ok {
+                        return CheckResult(
+                            isOnline: true,
+                            method: .nc,
+                            effectivePort: endpoint.port,
+                            durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                            checkedAt: end,
+                            failureKind: nil,
+                            failureMessage: nil,
+                            toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
+                                ("TCP_CONFIRM", "TCP_FAIL: \(tcpFailureSummary(tcp))"),
+                                ("NC_RECOVERY", ncConfirm.output)
+                            ])
+                        )
+                    }
+
                     return CheckResult(
-                        isOnline: nmap.ok,
-                        method: nmap.ok ? .nmap : .tcp,
+                        isOnline: false,
+                        method: .tcp,
                         effectivePort: nmap.openPort ?? endpoint.port,
                         durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
                         checkedAt: end,
-                        failureKind: nmap.ok ? nil : (tcp.failureKind ?? nmap.failureKind ?? .unreachable),
-                        failureMessage: nmap.ok ? nil : "TCP: \(tcpFailureSummary(tcp)) | nmap: \((nmap.failureMessage ?? "falhou").trimmingCharacters(in: .whitespacesAndNewlines))",
-                        toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [])
+                        failureKind: tcp.failureKind ?? nmap.failureKind ?? .unreachable,
+                        failureMessage: "TCP: \(tcpFailureSummary(tcp)) | nmap: \((nmap.failureMessage ?? "falhou").trimmingCharacters(in: .whitespacesAndNewlines))",
+                        toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmap.output, attachments: [
+                            ("NC_RECOVERY", ncConfirm.output)
+                        ])
                     )
                 }
 
