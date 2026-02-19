@@ -669,12 +669,14 @@ struct ContentView: View {
             }
         }
         .padding()
-        .background(Color.black.opacity(0.92))
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .frame(maxHeight: .infinity, alignment: .top)
+        .panelCardStyle()
+        .padding(10)
+        .background(Color.black)
     }
 
     private var detail: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(selectedClient?.name ?? "Visão Geral")
@@ -689,16 +691,17 @@ struct ContentView: View {
                     store.logHelpOpened()
                     showHelp = true
                 }
-                    .buttonStyle(.bordered)
-                    .keyboardShortcut("/", modifiers: [.command])
+                .buttonStyle(.bordered)
+                .keyboardShortcut("/", modifiers: [.command])
             }
+            .padding(.bottom, 2)
 
             if selectedClient == nil && !isGlobalSearchActive {
                 Text("Selecione um cliente para visualizar os acessos.")
                     .foregroundStyle(.secondary)
                 Spacer()
             } else {
-                VStack(spacing: 10) {
+                VStack(spacing: 8) {
                     HStack {
                         TextField("Buscar acesso...", text: $accessesSearchText)
                             .textFieldStyle(.roundedBorder)
@@ -721,6 +724,7 @@ struct ContentView: View {
                     HStack(spacing: 8) {
                         Button("Abrir") { openSelectedAccess() }
                             .buttonStyle(.borderedProminent)
+                            .tint(.blue)
                             .keyboardShortcut(.defaultAction)
                             .disabled(selectedAccessRow == nil)
                         Button {
@@ -734,7 +738,8 @@ struct ContentView: View {
                         } label: {
                             Label(isCheckingConnectivity ? "Checando..." : "Checar Conectividade", systemImage: "wave.3.right")
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(.borderedProminent)
+                        .tint(.teal)
                         .keyboardShortcut("k", modifiers: [.command, .shift])
                         .disabled(isCheckingConnectivity || selectedClient == nil || allRowsForSelectedClient.isEmpty)
                         Button {
@@ -743,12 +748,17 @@ struct ContentView: View {
                             Label("Checar Selecionado", systemImage: "dot.radiowaves.left.and.right")
                         }
                         .buttonStyle(.bordered)
+                        .tint(.orange)
                         .disabled(isCheckingConnectivity || selectedAccessRow == nil)
                         Button("Cancelar") {
                             cancelConnectivityCheck()
                         }
                         .buttonStyle(.bordered)
+                        .tint(.red)
                         .disabled(!isCheckingConnectivity)
+
+                        Spacer(minLength: 12)
+
                         Button("Editar") { editSelectedAccess() }
                             .buttonStyle(.bordered)
                             .keyboardShortcut("e", modifiers: [.command])
@@ -823,7 +833,14 @@ struct ContentView: View {
 
                     Table(accessTableRows, selection: $selectedAccessId, sortOrder: $accessSortOrder) {
                         TableColumn("Status", value: \.statusOrder) { item in
-                            connectivityIndicator(for: connectivityState(for: item.id), size: 10)
+                            HStack(spacing: 6) {
+                                connectivityIndicator(for: connectivityState(for: item.id), size: 10)
+                                if selectedAccessId == item.id {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.blue)
+                                }
+                            }
                         }
                         .width(min: 54, ideal: 70, max: 120)
 
@@ -888,6 +905,14 @@ struct ContentView: View {
                         }
                         .width(min: 140, ideal: 240)
                     }
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(Color.white.opacity(0.03))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                    )
                     .contextMenu {
                         let target = selectedAccessRow
                         Button("Novo Acesso") {
@@ -911,13 +936,36 @@ struct ContentView: View {
                     }
                 }
                 .padding()
-                .background(Color(red: 0.03, green: 0.05, blue: 0.08))
-                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .panelCardStyle()
                 Spacer(minLength: 0)
             }
         }
         .padding()
         .background(Color.black)
+    }
+
+    struct PanelCardModifier: ViewModifier {
+        func body(content: Content) -> some View {
+            let shape = RoundedRectangle(cornerRadius: 16, style: .continuous)
+            content
+                .background(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.07, green: 0.10, blue: 0.15),
+                            Color(red: 0.03, green: 0.05, blue: 0.08)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: shape
+                )
+                .overlay(
+                    shape
+                        .stroke(Color.white.opacity(0.12), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.35), radius: 12, x: 0, y: 6)
+                .clipShape(shape)
+        }
     }
 
     /// Formatter estático reutilizado para evitar alocações repetidas a cada render.
@@ -2143,5 +2191,11 @@ struct ContentView: View {
         case .unknown:
             return .gray
         }
+    }
+}
+
+private extension View {
+    func panelCardStyle() -> some View {
+        modifier(ContentView.PanelCardModifier())
     }
 }
