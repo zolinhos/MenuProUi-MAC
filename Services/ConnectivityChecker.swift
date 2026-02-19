@@ -389,6 +389,8 @@ enum ConnectivityChecker {
         let tcp = await checkTCPDetailed(host: probeHost, port: endpoint.port, timeout: timeout)
         let curlOut = await curlDiagnosticsIfAvailable(url: row.url)
         let curlOk = curlLooksOnline(curlOut)
+        let curlExit = toolExitCode(curlOut)
+        let curlTimedOut = (curlExit == 28)
         if let curlOk {
             if tcp.ok == curlOk {
                 end = Date()
@@ -407,6 +409,18 @@ enum ConnectivityChecker {
                 onlineVotes += nmapTie.ok ? 1 : 0
                 end = Date()
                 if onlineVotes >= 2 {
+                    if curlTimedOut {
+                        return CheckResult(
+                            isOnline: false,
+                            method: .tcp,
+                            effectivePort: endpoint.port,
+                            durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)),
+                            checkedAt: end,
+                            failureKind: .timeout,
+                            failureMessage: "HTTP timeout (curl exit 28) com porta aberta; resolvido como offline",
+                            toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nmapTie.output, attachments: [("CURL", curlOut), ("NC_TIEBREAKER", ncTie.output)])
+                        )
+                    }
                     return CheckResult(
                         isOnline: true,
                         method: nmapTie.ok ? .nmap : (ncTie.ok ? .nc : .tcp),
@@ -432,6 +446,9 @@ enum ConnectivityChecker {
 
             end = Date()
             if onlineVotes >= 2 {
+                if curlTimedOut {
+                    return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .timeout, failureMessage: "HTTP timeout (curl exit 28) com porta aberta; resolvido como offline", toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nil, attachments: [("CURL", curlOut), ("NC_TIEBREAKER", ncTie.output)]))
+                }
                 return CheckResult(isOnline: true, method: ncTie.ok ? .nc : .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: nil, failureMessage: nil, toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nil, attachments: [("CURL", curlOut), ("NC_TIEBREAKER", ncTie.output)]))
             }
             return CheckResult(isOnline: false, method: .tcp, effectivePort: endpoint.port, durationMs: max(0, Int(end.timeIntervalSince(start) * 1000.0)), checkedAt: end, failureKind: .unreachable, failureMessage: "Divergência HTTP/TCP resolvida como offline (curl/tcp/nc)", toolOutput: mergeToolOutputs(resolveNote: resolveNote, primary: nil, attachments: [("CURL", curlOut), ("NC_TIEBREAKER", ncTie.output)]))

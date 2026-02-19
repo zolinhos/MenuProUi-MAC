@@ -47,7 +47,10 @@ struct ContentView: View {
     @State private var clientsSearchText = ""
     @State private var accessesSearchText = ""
     @State private var connectivityFilter: ConnectivityFilter = .all
-    @State private var sortByConnectivityStatus = false
+    @State private var accessSortOrder: [KeyPathComparator<AccessTableRow>] = [
+        KeyPathComparator(\AccessTableRow.statusOrder, order: .forward),
+        KeyPathComparator(\AccessTableRow.alias, order: .forward)
+    ]
 
     @State private var showAddClient = false
     @State private var showAddSSH = false
@@ -112,6 +115,23 @@ struct ContentView: View {
         let errorDetail: String
     }
 
+    private struct AccessTableRow: Identifiable {
+        let id: String
+        let statusOrder: Int
+        let checkedSort: Date
+        let checkedLabel: String
+        let typeLabel: String
+        let alias: String
+        let host: String
+        let portValue: Int
+        let portLabel: String
+        let principal: String
+        let method: String
+        let latencyMs: Int
+        let error: String
+        let favorite: Bool
+    }
+
     private struct ConnectivityEndpoint: Hashable {
         let kind: AccessKind
         let host: String
@@ -130,13 +150,10 @@ struct ContentView: View {
 
     var body: some View {
         dialogsLayer
-            .overlay(shortcutActionsView.hidden())
-            .overlay(alignment: .top) {
-                if showScanBanner || isCheckingConnectivity {
-                    scanStatusBanner
-                        .padding(.top, 12)
-                }
+            .safeAreaInset(edge: .bottom) {
+                statusBar
             }
+            .overlay(shortcutActionsView.hidden())
     }
 
     private var selectedClient: Client? {
@@ -182,26 +199,6 @@ struct ContentView: View {
 
     private func sortRows(_ rows: [AccessRow]) -> [AccessRow] {
         rows.sorted { lhs, rhs in
-            if lhs.isFavorite != rhs.isFavorite {
-                return lhs.isFavorite && !rhs.isFavorite
-            }
-            if lhs.clientName != rhs.clientName {
-                return lhs.clientName.localizedCaseInsensitiveCompare(rhs.clientName) == .orderedAscending
-            }
-            if lhs.kind.rawValue == rhs.kind.rawValue {
-                return lhs.alias.localizedCaseInsensitiveCompare(rhs.alias) == .orderedAscending
-            }
-            return lhs.kind.rawValue < rhs.kind.rawValue
-        }
-    }
-
-    private func sortRowsWithConnectivity(_ rows: [AccessRow]) -> [AccessRow] {
-        rows.sorted { lhs, rhs in
-            let ls = connectivityState(for: lhs.id)
-            let rs = connectivityState(for: rhs.id)
-            let lo = connectivityOrder(ls)
-            let ro = connectivityOrder(rs)
-            if lo != ro { return lo < ro }
             if lhs.isFavorite != rhs.isFavorite {
                 return lhs.isFavorite && !rhs.isFavorite
             }
@@ -263,7 +260,39 @@ struct ContentView: View {
             return matchesLocal && matchesGlobal && matchesConn
         }
 
-        return sortByConnectivityStatus ? sortRowsWithConnectivity(filtered) : sortRows(filtered)
+        return sortRows(filtered)
+    }
+
+    private var accessTableRows: [AccessTableRow] {
+        let mapped = filteredRows.map { row -> AccessTableRow in
+            let state = connectivityState(for: row.id)
+            let statusOrder = connectivityOrder(state)
+            let checkedLabel = lastCheckedLabel(for: row.id)
+            let checkedSort = connectivityCache[row.id]?.checkedAt ?? .distantPast
+            let method = connectivityMethodLabel(for: row.id)
+            let latencyMs = Int(connectivityLatencyLabel(for: row.id)) ?? -1
+            let error = connectivityErrorLabel(for: row.id)
+            let principal = row.kind == .url ? row.url : row.user
+            let portValue = Int(row.port) ?? -1
+
+            return AccessTableRow(
+                id: row.id,
+                statusOrder: statusOrder,
+                checkedSort: checkedSort,
+                checkedLabel: checkedLabel,
+                typeLabel: row.kind.rawValue,
+                alias: row.alias,
+                host: row.host,
+                portValue: portValue,
+                portLabel: row.port,
+                principal: principal,
+                method: method,
+                latencyMs: latencyMs,
+                error: error,
+                favorite: row.isFavorite
+            )
+        }
+        return mapped.sorted(using: accessSortOrder)
     }
 
     private func clientMatches(_ client: Client, term: String) -> Bool {
@@ -686,9 +715,6 @@ struct ContentView: View {
                         }
                         .pickerStyle(.segmented)
 
-                        Toggle("Ordenar por status", isOn: $sortByConnectivityStatus)
-                            .toggleStyle(.switch)
-
                         Spacer()
                     }
 
@@ -795,35 +821,75 @@ struct ContentView: View {
                         }
                     }
 
-                    accessHeader
-
-                    List(selection: $selectedAccessId) {
-                        ForEach(filteredRows) { row in
-                            accessRowView(row)
-                                .tag(row.id)
-                                // Nenhuma gesture SwiftUI aqui — seleção 100% nativa do List.
-                                // Duplo clique tratado via NSEvent monitor + NotificationCenter.
-                                .contextMenu {
-                                    Button("Novo Acesso") {
-                                        guard selectedClient != nil else {
-                                            showErrText("Selecione um cliente antes de criar um acesso.")
-                                            return
-                                        }
-                                        store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=context menu acesso")
-                                        showAddAccessChooser = true
-                                    }
-                                    Divider()
-                                    Button("Abrir") { open(row: row) }
-                                    Button("Checar este acesso") { checkSingleAccessConnectivity(row: row) }
-                                    Button("Checar cliente deste acesso") { checkClientConnectivity(for: row) }
-                                    Button(row.isFavorite ? "Desfavoritar" : "Favoritar") { toggleFavorite(row: row) }
-                                    Button("Clonar") { clone(row: row) }
-                                    Button("Editar") { edit(row: row) }
-                                    Button("Excluir", role: .destructive) { delete(row: row) }
-                                }
+                    Table(accessTableRows, selection: $selectedAccessId, sortOrder: $accessSortOrder) {
+                        TableColumn("Status", value: \.statusOrder) { item in
+                            connectivityIndicator(for: connectivityState(for: item.id), size: 10)
                         }
+                        .width(min: 54, ideal: 70, max: 120)
+
+                        TableColumn("Checado", value: \.checkedSort) { item in
+                            Text(item.checkedLabel)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .width(min: 70, ideal: 84, max: 140)
+
+                        TableColumn("Tipo", value: \.typeLabel) { item in
+                            Text(item.typeLabel)
+                        }
+                        .width(min: 60, ideal: 70, max: 120)
+
+                        TableColumn("Alias", value: \.alias) { item in
+                            HStack(spacing: 6) {
+                                if item.favorite {
+                                    Image(systemName: "star.fill")
+                                        .foregroundStyle(.yellow)
+                                }
+                                Text(item.alias)
+                            }
+                        }
+                        .width(min: 140, ideal: 220)
+
+                        TableColumn("Host", value: \.host) { item in
+                            Text(item.host)
+                        }
+                        .width(min: 140, ideal: 220)
+
+                        TableColumn("Porta", value: \.portValue) { item in
+                            Text(item.portLabel)
+                        }
+                        .width(min: 60, ideal: 80, max: 120)
+
+                        TableColumn("Usuário/URL", value: \.principal) { item in
+                            Text(item.principal)
+                                .lineLimit(1)
+                        }
+                        .width(min: 160, ideal: 280)
+
+                        TableColumn("Método", value: \.method) { item in
+                            Text(item.method)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .width(min: 70, ideal: 84, max: 140)
+
+                        TableColumn("ms", value: \.latencyMs) { item in
+                            Text(item.latencyMs >= 0 ? "\(item.latencyMs)" : "-")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        .width(min: 56, ideal: 70, max: 120)
+
+                        TableColumn("Erro", value: \.error) { item in
+                            Text(item.error)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        .width(min: 140, ideal: 240)
                     }
                     .contextMenu {
+                        let target = selectedAccessRow
                         Button("Novo Acesso") {
                             guard selectedClient != nil else {
                                 showErrText("Selecione um cliente antes de criar um acesso.")
@@ -831,6 +897,16 @@ struct ContentView: View {
                             }
                             store.logUIAction(action: "new_access_dialog_opened", entityName: selectedClient?.name ?? "cliente", details: "Origem=context menu grid acessos")
                             showAddAccessChooser = true
+                        }
+                        if let target {
+                            Divider()
+                            Button("Abrir") { open(row: target) }
+                            Button("Checar este acesso") { checkSingleAccessConnectivity(row: target) }
+                            Button("Checar cliente deste acesso") { checkClientConnectivity(for: target) }
+                            Button(target.isFavorite ? "Desfavoritar" : "Favoritar") { toggleFavorite(row: target) }
+                            Button("Clonar") { clone(row: target) }
+                            Button("Editar") { edit(row: target) }
+                            Button("Excluir", role: .destructive) { delete(row: target) }
                         }
                     }
                 }
@@ -842,70 +918,6 @@ struct ContentView: View {
         }
         .padding()
         .background(Color.black)
-    }
-
-    private var accessHeader: some View {
-        HStack {
-            Text("Status").frame(width: 54, alignment: .leading)
-            Text("Checado").frame(width: 70, alignment: .leading)
-            Text("Tipo").frame(width: 60, alignment: .leading)
-            Text("Alias").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Host").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Porta").frame(width: 60, alignment: .leading)
-            Text("Usuário/URL").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Método").frame(width: 60, alignment: .leading)
-            Text("ms").frame(width: 50, alignment: .trailing)
-            Text("Erro").frame(width: 180, alignment: .leading)
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-    }
-
-    private func accessRowView(_ row: AccessRow) -> some View {
-        HStack {
-            connectivityIndicator(for: connectivityState(for: row.id), size: 10)
-                .frame(width: 54, alignment: .leading)
-
-            Text(lastCheckedLabel(for: row.id))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 70, alignment: .leading)
-
-            Text(row.kind.rawValue).frame(width: 60, alignment: .leading)
-            HStack(spacing: 6) {
-                if row.isFavorite {
-                    Image(systemName: "star.fill")
-                        .foregroundStyle(.yellow)
-                }
-                Text(row.alias)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            Text(row.host).frame(maxWidth: .infinity, alignment: .leading)
-            Text(row.port).frame(width: 60, alignment: .leading)
-            Text(row.kind == .url ? row.url : row.user)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(connectivityMethodLabel(for: row.id))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 60, alignment: .leading)
-
-            Text(connectivityLatencyLabel(for: row.id))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .frame(width: 50, alignment: .trailing)
-
-            Text(connectivityErrorLabel(for: row.id))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(width: 180, alignment: .leading)
-        }
-        .padding(.vertical, 3)
-        // contentShape garante que toda a área da linha (inclusive espaços entre textos)
-        // seja detectável pelo List para seleção, não apenas os Text views.
-        .contentShape(Rectangle())
     }
 
     /// Formatter estático reutilizado para evitar alocações repetidas a cada render.
@@ -2039,28 +2051,44 @@ struct ContentView: View {
         return String(format: "%02d:%02d", m, s)
     }
 
-    private var scanStatusBanner: some View {
-        HStack(spacing: 10) {
+    private var statusBar: some View {
+        let hasMessage = showScanBanner || isCheckingConnectivity
+        let statusText = scanBannerMessage.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return HStack(spacing: 10) {
             Image(systemName: isCheckingConnectivity ? "wave.3.right.circle.fill" : (bannerIsError ? "xmark.octagon.fill" : "checkmark.seal.fill"))
                 .foregroundStyle(isCheckingConnectivity ? .yellow : (bannerIsError ? .red : .green))
-            Text(scanBannerMessage)
+            Text(hasMessage && !statusText.isEmpty ? statusText : "Pronto.")
                 .font(.caption)
-                .lineLimit(2)
+                .lineLimit(1)
             Spacer(minLength: 8)
-            if !isCheckingConnectivity {
-                Button("Fechar") {
+
+            if isCheckingConnectivity {
+                let total = max(connectivityProgressTotal, 1)
+                let done = max(0, min(connectivityProgressDone, total))
+                let percent = Int((Double(done) / Double(total)) * 100.0)
+                Text("\(done)/\(connectivityProgressTotal) — \(percent)%")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if hasMessage && !isCheckingConnectivity {
+                Button("Limpar") {
                     showScanBanner = false
                     bannerIsError = false
+                    scanBannerMessage = ""
                 }
                 .buttonStyle(.borderless)
                 .font(.caption)
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .frame(maxWidth: 900)
-        .background(.ultraThinMaterial, in: Capsule())
-        .shadow(radius: 6)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
+        .overlay(alignment: .top) {
+            Divider().opacity(0.45)
+        }
     }
 
     private func parsePortsCSV(_ raw: String, fallback: [Int]) -> [Int] {
