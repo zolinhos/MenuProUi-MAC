@@ -27,6 +27,7 @@ struct AddAccessView: View {
     let clients: [Client]
     let preselected: Client?
     let initialKind: AccessKind
+    let initialPayload: AddAccessPayload?
     let onSave: (AddAccessPayload) -> Void
 
     @State private var kind: AccessKind
@@ -50,10 +51,11 @@ struct AddAccessView: View {
     private var appLanguage: AppLanguage { .from(appLanguageRaw) }
     private func t(_ pt: String, _ en: String) -> String { I18n.text(pt, en, language: appLanguage) }
 
-    init(clients: [Client], preselected: Client?, initialKind: AccessKind, onSave: @escaping (AddAccessPayload) -> Void) {
+    init(clients: [Client], preselected: Client?, initialKind: AccessKind, initialPayload: AddAccessPayload? = nil, onSave: @escaping (AddAccessPayload) -> Void) {
         self.clients = clients
         self.preselected = preselected
         self.initialKind = initialKind
+        self.initialPayload = initialPayload
         self.onSave = onSave
         _kind = State(initialValue: initialKind)
     }
@@ -72,7 +74,7 @@ struct AddAccessView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(t("Novo acesso", "New access")).font(.title2).bold()
+            Text(initialPayload == nil ? t("Novo acesso", "New access") : t("Editar acesso", "Edit access")).font(.title2).bold()
 
             Form {
                 Picker(t("Cliente", "Client"), selection: $clientId) {
@@ -169,9 +171,27 @@ struct AddAccessView: View {
         .frame(minWidth: 780, minHeight: 620)
         .preferredColorScheme(.dark)
         .onAppear {
-            if clientId.isEmpty {
-                clientId = preselected?.id ?? clients.first?.id ?? ""
+            if let payload = initialPayload {
+                kind = payload.kind
+                alias = payload.alias
+                clientId = payload.clientId
+                name = payload.name
+                host = payload.host
+                portText = "\(payload.port)"
+                user = payload.user
+                domain = payload.domain
+                scheme = payload.scheme
+                path = payload.path
+                tags = payload.tags
+                notes = payload.notes
+                rdpIgnoreCert = payload.rdpIgnoreCert
+                rdpFullScreen = payload.rdpFullScreen
+                rdpDynamicResolution = payload.rdpDynamicResolution
+                rdpWidthText = payload.rdpWidth.map(String.init) ?? ""
+                rdpHeightText = payload.rdpHeight.map(String.init) ?? ""
+                return
             }
+            if clientId.isEmpty { clientId = preselected?.id ?? clients.first?.id ?? "" }
             switch initialKind {
             case .ssh: portText = "22"
             case .rdp: portText = "3389"

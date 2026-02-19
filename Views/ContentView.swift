@@ -71,10 +71,7 @@ struct ContentView: View {
     @State private var auditEvents: [AuditEvent] = []
 
     @State private var editingClient: Client?
-    @State private var editingSSH: SSHServer?
-    @State private var editingRDP: RDPServer?
-    @State private var editingURL: URLAccess?
-    @State private var editingMTK: MTKAccess?
+    @State private var editingAccessRow: AccessRow?
 
     @State private var confirmDeleteClient: Client?
     @State private var confirmDeleteSSH: SSHServer?
@@ -435,7 +432,7 @@ struct ContentView: View {
                         selectedClientId = store.clients.first(where: { $0.id.caseInsensitiveCompare(id) == .orderedSame })?.id
                     } catch { showErr(error) }
                 }
-                .presentationDetents([.medium])
+                .presentationDetents([.large])
             }
             .sheet(isPresented: $showAddAccessForm) {
                 AddAccessView(clients: store.clients, preselected: selectedClient, initialKind: addAccessInitialKind) { payload in
@@ -465,39 +462,19 @@ struct ContentView: View {
                 }
                 .presentationDetents([.medium])
             }
-            .sheet(item: $editingSSH) { item in
-                EditSSHView(item: item) { updated in
+            .sheet(item: $editingAccessRow) { row in
+                AddAccessView(
+                    clients: store.clients,
+                    preselected: selectedClient,
+                    initialKind: row.kind,
+                    initialPayload: editPayload(for: row)
+                ) { payload in
                     do {
-                        try store.updateSSH(updated)
-                        invalidateConnectivityCache(kind: .ssh, id: updated.id, host: updated.host, port: "\(updated.port)", url: "")
-                    } catch { showErr(error) }
-                }
-                .presentationDetents([.medium])
-            }
-            .sheet(item: $editingRDP) { item in
-                EditRDPView(item: item) { updated in
-                    do {
-                        try store.updateRDP(updated)
-                        invalidateConnectivityCache(kind: .rdp, id: updated.id, host: updated.host, port: "\(updated.port)", url: "")
-                    } catch { showErr(error) }
-                }
-                .presentationDetents([.large])
-            }
-            .sheet(item: $editingURL) { item in
-                EditURLView(item: item) { updated in
-                    do {
-                        try store.updateURL(updated)
-                        let urlValue = "\(updated.scheme)://\(updated.host):\(updated.port)\(updated.path)"
-                        invalidateConnectivityCache(kind: .url, id: updated.id, host: updated.host, port: "\(updated.port)", url: urlValue)
-                    } catch { showErr(error) }
-                }
-                .presentationDetents([.large])
-            }
-            .sheet(item: $editingMTK) { item in
-                EditMTKView(item: item) { updated in
-                    do {
-                        try store.updateMTK(updated)
-                        invalidateConnectivityCache(kind: .mtk, id: updated.id, host: updated.host, port: "\(updated.port)", url: "")
+                        try store.updateAccess(id: row.id, originalKind: row.kind, payload: payload)
+                        let urlValue = payload.kind == .url ? "\(payload.scheme)://\(payload.host):\(payload.port)\(payload.path)" : ""
+                        invalidateConnectivityCache(kind: row.kind, id: row.id, host: row.host, port: row.port, url: row.url)
+                        invalidateConnectivityCache(kind: payload.kind, id: row.id, host: payload.host, port: "\(payload.port)", url: urlValue)
+                        selectedAccessId = row.id
                     } catch { showErr(error) }
                 }
                 .presentationDetents([.medium])
@@ -1073,15 +1050,95 @@ struct ContentView: View {
     }
 
     private func edit(row: AccessRow) {
+        editingAccessRow = row
+    }
+
+    private func editPayload(for row: AccessRow) -> AddAccessPayload {
         switch row.kind {
         case .ssh:
-            editingSSH = store.ssh.first(where: { $0.id == row.id })
+            let item = store.ssh.first(where: { $0.id == row.id })
+            return AddAccessPayload(
+                kind: .ssh,
+                alias: item?.alias ?? row.alias,
+                clientId: item?.clientId ?? row.clientId,
+                name: item?.name ?? row.name,
+                host: item?.host ?? row.host,
+                port: item?.port ?? Int(row.port) ?? 22,
+                user: item?.user ?? row.user,
+                domain: "",
+                scheme: "https",
+                path: "/",
+                tags: item?.tags ?? row.tags,
+                notes: item?.notes ?? row.notes,
+                rdpIgnoreCert: true,
+                rdpFullScreen: false,
+                rdpDynamicResolution: true,
+                rdpWidth: nil,
+                rdpHeight: nil
+            )
         case .rdp:
-            editingRDP = store.rdp.first(where: { $0.id == row.id })
+            let item = store.rdp.first(where: { $0.id == row.id })
+            return AddAccessPayload(
+                kind: .rdp,
+                alias: item?.alias ?? row.alias,
+                clientId: item?.clientId ?? row.clientId,
+                name: item?.name ?? row.name,
+                host: item?.host ?? row.host,
+                port: item?.port ?? Int(row.port) ?? 3389,
+                user: item?.user ?? row.user,
+                domain: item?.domain ?? "",
+                scheme: "https",
+                path: "/",
+                tags: item?.tags ?? row.tags,
+                notes: item?.notes ?? row.notes,
+                rdpIgnoreCert: item?.ignoreCert ?? true,
+                rdpFullScreen: item?.fullScreen ?? false,
+                rdpDynamicResolution: item?.dynamicResolution ?? true,
+                rdpWidth: item?.width,
+                rdpHeight: item?.height
+            )
         case .url:
-            editingURL = store.urls.first(where: { $0.id == row.id })
+            let item = store.urls.first(where: { $0.id == row.id })
+            return AddAccessPayload(
+                kind: .url,
+                alias: item?.alias ?? row.alias,
+                clientId: item?.clientId ?? row.clientId,
+                name: item?.name ?? row.name,
+                host: item?.host ?? row.host,
+                port: item?.port ?? Int(row.port) ?? 443,
+                user: "",
+                domain: "",
+                scheme: item?.scheme ?? "https",
+                path: item?.path ?? "/",
+                tags: item?.tags ?? row.tags,
+                notes: item?.notes ?? row.notes,
+                rdpIgnoreCert: true,
+                rdpFullScreen: false,
+                rdpDynamicResolution: true,
+                rdpWidth: nil,
+                rdpHeight: nil
+            )
         case .mtk:
-            editingMTK = store.mtk.first(where: { $0.id == row.id })
+            let item = store.mtk.first(where: { $0.id == row.id })
+            return AddAccessPayload(
+                kind: .mtk,
+                alias: item?.alias ?? row.alias,
+                clientId: item?.clientId ?? row.clientId,
+                name: item?.name ?? row.name,
+                host: item?.host ?? row.host,
+                port: item?.port ?? Int(row.port) ?? 8291,
+                user: item?.user ?? row.user,
+                domain: "",
+                scheme: "https",
+                path: "/",
+                tags: item?.tags ?? row.tags,
+                notes: item?.notes ?? row.notes,
+                rdpIgnoreCert: true,
+                rdpFullScreen: false,
+                rdpDynamicResolution: true,
+                rdpWidth: nil,
+                rdpHeight: nil
+            )
         }
     }
 

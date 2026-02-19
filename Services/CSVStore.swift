@@ -991,6 +991,71 @@ final class CSVStore: ObservableObject {
         logEvent(action: "edit", entityType: "access", entityName: updated.alias, details: "Acesso MTK atualizado")
     }
 
+    func updateAccess(id: String, originalKind: AccessKind, payload: AddAccessPayload) throws {
+        var rows = loadAccessRows()
+        guard let idx = rows.firstIndex(where: { $0.kind == originalKind && $0.id.caseInsensitiveCompare(id) == .orderedSame }) else { return }
+
+        rows[idx].kind = payload.kind
+        rows[idx].clientId = payload.clientId
+        rows[idx].alias = payload.alias
+        rows[idx].name = payload.name
+        rows[idx].host = payload.host
+        rows[idx].port = sanitizePort(payload.port, fallback: defaultPort(for: payload.kind, scheme: payload.scheme))
+        rows[idx].tags = payload.tags
+        rows[idx].notes = payload.notes
+        rows[idx].updatedAt = nowTimestamp()
+
+        switch payload.kind {
+        case .ssh:
+            rows[idx].user = payload.user
+            rows[idx].domain = ""
+            rows[idx].rdpIgnoreCert = true
+            rows[idx].rdpFullScreen = false
+            rows[idx].rdpDynamicResolution = true
+            rows[idx].rdpWidth = nil
+            rows[idx].rdpHeight = nil
+            rows[idx].scheme = "https"
+            rows[idx].path = ""
+        case .rdp:
+            rows[idx].user = payload.user
+            rows[idx].domain = payload.domain
+            rows[idx].rdpIgnoreCert = payload.rdpIgnoreCert
+            rows[idx].rdpFullScreen = payload.rdpFullScreen
+            rows[idx].rdpDynamicResolution = payload.rdpDynamicResolution
+            rows[idx].rdpWidth = payload.rdpWidth
+            rows[idx].rdpHeight = payload.rdpHeight
+            rows[idx].scheme = "https"
+            rows[idx].path = ""
+        case .url:
+            rows[idx].user = ""
+            rows[idx].domain = ""
+            rows[idx].rdpIgnoreCert = true
+            rows[idx].rdpFullScreen = false
+            rows[idx].rdpDynamicResolution = true
+            rows[idx].rdpWidth = nil
+            rows[idx].rdpHeight = nil
+            rows[idx].scheme = sanitizeScheme(payload.scheme)
+            rows[idx].path = sanitizePath(payload.path)
+        case .mtk:
+            rows[idx].user = payload.user
+            rows[idx].domain = ""
+            rows[idx].rdpIgnoreCert = true
+            rows[idx].rdpFullScreen = false
+            rows[idx].rdpDynamicResolution = true
+            rows[idx].rdpWidth = nil
+            rows[idx].rdpHeight = nil
+            rows[idx].scheme = "https"
+            rows[idx].path = ""
+        }
+
+        try saveAccessRows(rows)
+        reload()
+        let details = originalKind == payload.kind
+            ? "Acesso atualizado"
+            : "Tipo alterado de \(originalKind.rawValue) para \(payload.kind.rawValue)"
+        logEvent(action: "edit", entityType: "access", entityName: payload.alias, details: details)
+    }
+
     func deleteMTK(id: String) throws {
         var rows = loadAccessRows()
         let deleted = rows.first { $0.kind == .mtk && $0.id.caseInsensitiveCompare(id) == .orderedSame }
