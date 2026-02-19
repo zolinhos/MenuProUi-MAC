@@ -22,6 +22,7 @@ struct AddAccessPayload {
 
 struct AddAccessView: View {
     @Environment(\.dismiss) private var dismiss
+    @AppStorage("app.language") private var appLanguageRaw = AppLanguage.pt.rawValue
 
     let clients: [Client]
     let preselected: Client?
@@ -46,6 +47,9 @@ struct AddAccessView: View {
     @State private var rdpWidthText = ""
     @State private var rdpHeightText = ""
 
+    private var appLanguage: AppLanguage { .from(appLanguageRaw) }
+    private func t(_ pt: String, _ en: String) -> String { I18n.text(pt, en, language: appLanguage) }
+
     init(clients: [Client], preselected: Client?, initialKind: AccessKind, onSave: @escaping (AddAccessPayload) -> Void) {
         self.clients = clients
         self.preselected = preselected
@@ -68,17 +72,17 @@ struct AddAccessView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Novo acesso").font(.title2).bold()
+            Text(t("Novo acesso", "New access")).font(.title2).bold()
 
             Form {
-                Picker("Cliente", selection: $clientId) {
-                    Text("Selecione...").tag("")
+                Picker(t("Cliente", "Client"), selection: $clientId) {
+                    Text(t("Selecione...", "Select...")).tag("")
                     ForEach(clients, id: \.id) { c in
                         Text("\(c.name) (\(c.id))").tag(c.id)
                     }
                 }
 
-                Picker("Tipo", selection: $kind) {
+                Picker(t("Tipo", "Type"), selection: $kind) {
                     Text("SSH").tag(AccessKind.ssh)
                     Text("RDP").tag(AccessKind.rdp)
                     Text("URL").tag(AccessKind.url)
@@ -93,28 +97,28 @@ struct AddAccessView: View {
                     }
                 }
 
-                TextField("Alias", text: $alias)
-                TextField("Nome", text: $name)
-                TextField("Host/IP", text: $host)
-                TextField("Porta", text: $portText)
+                TextField(t("Alias", "Alias"), text: $alias)
+                TextField(t("Nome", "Name"), text: $name)
+                TextField(t("Host/IP", "Host/IP"), text: $host)
+                TextField(t("Porta", "Port"), text: $portText)
 
                 if requiresUser {
-                    TextField("Usuário", text: $user)
+                    TextField(t("Usuário", "User"), text: $user)
                 }
 
                 if isRDP {
-                    TextField("Domínio", text: $domain)
-                    Toggle("Ignorar certificado", isOn: $rdpIgnoreCert)
-                    Toggle("Tela cheia", isOn: $rdpFullScreen)
-                    Toggle("Resolução dinâmica", isOn: $rdpDynamicResolution)
+                    TextField(t("Domínio", "Domain"), text: $domain)
+                    Toggle(t("Ignorar certificado", "Ignore certificate"), isOn: $rdpIgnoreCert)
+                    Toggle(t("Tela cheia", "Full screen"), isOn: $rdpFullScreen)
+                    Toggle(t("Resolução dinâmica", "Dynamic resolution"), isOn: $rdpDynamicResolution)
                     if !rdpDynamicResolution {
-                        TextField("Largura (opcional)", text: $rdpWidthText)
-                        TextField("Altura (opcional)", text: $rdpHeightText)
+                        TextField(t("Largura (opcional)", "Width (optional)"), text: $rdpWidthText)
+                        TextField(t("Altura (opcional)", "Height (optional)"), text: $rdpHeightText)
                     }
                 }
 
                 if isURL {
-                    Picker("Esquema", selection: $scheme) {
+                    Picker(t("Esquema", "Scheme"), selection: $scheme) {
                         Text("https").tag("https")
                         Text("http").tag("http")
                         Text("ftp").tag("ftp")
@@ -122,9 +126,9 @@ struct AddAccessView: View {
                     TextField("Path", text: $path)
                 }
 
-                TextField("Tags (opcional)", text: $tags)
+                TextField(t("Tags (opcional)", "Tags (optional)"), text: $tags)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Observações (opcional)")
+                    Text(t("Observações (opcional)", "Notes (optional)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     TextEditor(text: $notes)
@@ -133,9 +137,9 @@ struct AddAccessView: View {
             }
 
             HStack {
-                Button("Cancelar") { dismiss() }
+                Button(t("Cancelar", "Cancel")) { dismiss() }
                 Spacer()
-                Button("Salvar") {
+                Button(t("Salvar", "Save")) {
                     onSave(.init(
                         kind: kind,
                         alias: alias.trimmed,

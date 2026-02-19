@@ -40,6 +40,7 @@ struct ContentView: View {
     @AppStorage("connectivity.urlFallbackPorts") private var urlFallbackPortsCSV: String = "443,80,8443,8080,9443"
     @AppStorage("connectivity.autoCheckOnSelect") private var autoCheckOnSelect = false
     @AppStorage("connectivity.autoCheckDebounceMs") private var autoCheckDebounceMs: Int = 800
+    @AppStorage("app.language") private var appLanguageRaw = AppLanguage.pt.rawValue
 
     @State private var selectedClientId: String?
     @State private var selectedAccessId: String?
@@ -147,6 +148,9 @@ struct ContentView: View {
     /// Monitor de duplo clique via NSEvent (nível AppKit, não interfere na seleção do List).
     @State private var doubleClickMonitor: Any?
     @FocusState private var focusedSearchField: SearchField?
+
+    private var appLanguage: AppLanguage { .from(appLanguageRaw) }
+    private func t(_ pt: String, _ en: String) -> String { I18n.text(pt, en, language: appLanguage) }
 
     var body: some View {
         dialogsLayer
@@ -616,25 +620,25 @@ struct ContentView: View {
             }
 
             HStack(spacing: 8) {
-                Text("Exportar: ⇧⌘B")
+                Text(t("Exportar: ⇧⌘B", "Export: ⇧⌘B"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
-                Text("Importar: ⇧⌘I")
+                Text(t("Importar: ⇧⌘I", "Import: ⇧⌘I"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
-            TextField("Busca geral (cliente + acessos)...", text: $globalSearchText)
+            TextField(t("Busca geral (cliente + acessos)...", "Global search (client + accesses)..."), text: $globalSearchText)
                 .textFieldStyle(.roundedBorder)
                 .focused($focusedSearchField, equals: .global)
 
-            TextField("Buscar cliente...", text: $clientsSearchText)
+            TextField(t("Buscar cliente...", "Search client..."), text: $clientsSearchText)
                 .textFieldStyle(.roundedBorder)
                 .focused($focusedSearchField, equals: .clients)
 
             HStack {
-                Text("Clientes").font(.headline)
+                Text(t("Clientes", "Clients")).font(.headline)
                 Spacer()
                 Text("\(filteredClients.count)").foregroundStyle(.secondary)
             }
@@ -653,11 +657,11 @@ struct ContentView: View {
                     .padding(.vertical, 4)
                     .tag(client.id)
                     .contextMenu {
-                        Button("Novo Cliente") {
+                        Button(t("Novo Cliente", "New Client")) {
                             showAddClient = true
                         }
-                        Button("Editar") { editingClient = client }
-                        Button("Apagar", role: .destructive) { confirmDeleteClient = client }
+                        Button(t("Editar", "Edit")) { editingClient = client }
+                        Button(t("Apagar", "Delete"), role: .destructive) { confirmDeleteClient = client }
                     }
                 }
             }
@@ -665,11 +669,15 @@ struct ContentView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 4) {
-                Text("Arquivos").font(.caption).foregroundStyle(.secondary)
+                Text(t("Arquivos", "Files")).font(.caption).foregroundStyle(.secondary)
                 Text(store.clientsPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 Text(store.acessosPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 Text(store.eventosPath).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
             }
+
+            Text(t("Desenvolvido por Solutions", "Developed by Solutions"))
+                .font(.caption2)
+                .foregroundStyle(.secondary)
         }
         .padding()
         .frame(maxHeight: .infinity, alignment: .top)
@@ -685,12 +693,12 @@ struct ContentView: View {
                     Text(selectedClient?.name ?? "Visão Geral")
                         .font(.title)
                         .bold()
-                    Text("Conexões SSH, RDP e URL")
+                    Text(t("Conexões SSH, RDP e URL/MTK", "SSH, RDP and URL/MTK connections"))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button("Ajuda") {
+                Button(t("Ajuda", "Help")) {
                     store.logHelpOpened()
                     showHelp = true
                 }
@@ -700,16 +708,16 @@ struct ContentView: View {
             .padding(.bottom, 2)
 
             if selectedClient == nil && !isGlobalSearchActive {
-                Text("Selecione um cliente para visualizar os acessos.")
+                Text(t("Selecione um cliente para visualizar os acessos.", "Select a client to view accesses."))
                     .foregroundStyle(.secondary)
                 Spacer()
             } else {
                 VStack(spacing: 8) {
                     HStack {
-                        TextField("Buscar acesso...", text: $accessesSearchText)
+                        TextField(t("Buscar acesso...", "Search access..."), text: $accessesSearchText)
                             .textFieldStyle(.roundedBorder)
                             .focused($focusedSearchField, equals: .accesses)
-                        Text("\(filteredRows.count) acessos")
+                        Text("\(filteredRows.count) \(t("acessos", "accesses"))")
                             .foregroundStyle(.secondary)
                     }
 
@@ -725,7 +733,7 @@ struct ContentView: View {
                     }
 
                     HStack(spacing: 8) {
-                        Button("Abrir") { openSelectedAccess() }
+                        Button(t("Abrir", "Open")) { openSelectedAccess() }
                             .buttonStyle(.borderedProminent)
                             .tint(.blue)
                             .keyboardShortcut(.defaultAction)
@@ -739,7 +747,7 @@ struct ContentView: View {
                             lastConnectivityButtonTapAt = now
                             showConnectivityScopeChooser = true
                         } label: {
-                            Label(isCheckingConnectivity ? "Checando..." : "Checar Conectividade", systemImage: "wave.3.right")
+                            Label(isCheckingConnectivity ? t("Checando...", "Checking...") : t("Checar Conectividade", "Check Connectivity"), systemImage: "wave.3.right")
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(.teal)
@@ -748,12 +756,12 @@ struct ContentView: View {
                         Button {
                             checkSelectedAccessConnectivity()
                         } label: {
-                            Label("Checar Selecionado", systemImage: "dot.radiowaves.left.and.right")
+                            Label(t("Checar Selecionado", "Check Selected"), systemImage: "dot.radiowaves.left.and.right")
                         }
                         .buttonStyle(.bordered)
                         .tint(.orange)
                         .disabled(isCheckingConnectivity || selectedAccessRow == nil)
-                        Button("Cancelar") {
+                        Button(t("Cancelar", "Cancel")) {
                             cancelConnectivityCheck()
                         }
                         .buttonStyle(.bordered)
@@ -762,17 +770,17 @@ struct ContentView: View {
 
                         Spacer(minLength: 12)
 
-                        Button("Editar") { editSelectedAccess() }
+                        Button(t("Editar", "Edit")) { editSelectedAccess() }
                             .buttonStyle(.bordered)
                             .keyboardShortcut("e", modifiers: [.command])
                             .disabled(selectedAccessRow == nil)
-                        Button(selectedAccessRow?.isFavorite == true ? "Desfavoritar" : "Favoritar") {
+                        Button(selectedAccessRow?.isFavorite == true ? t("Desfavoritar", "Unfavorite") : t("Favoritar", "Favorite")) {
                             toggleFavoriteSelectedAccess()
                         }
                         .buttonStyle(.bordered)
                         .keyboardShortcut(".", modifiers: [.command])
                         .disabled(selectedAccessRow == nil)
-                        Button("Excluir", role: .destructive) { deleteSelectedAccess() }
+                        Button(t("Excluir", "Delete"), role: .destructive) { deleteSelectedAccess() }
                             .buttonStyle(.bordered)
                             .keyboardShortcut(.delete, modifiers: [])
                             .disabled(selectedAccessRow == nil)
@@ -2143,7 +2151,7 @@ struct ContentView: View {
         return HStack(spacing: 10) {
             Image(systemName: isCheckingConnectivity ? "wave.3.right.circle.fill" : (bannerIsError ? "xmark.octagon.fill" : "checkmark.seal.fill"))
                 .foregroundStyle(isCheckingConnectivity ? .yellow : (bannerIsError ? .red : .green))
-            Text(hasMessage && !statusText.isEmpty ? statusText : "Pronto.")
+            Text(hasMessage && !statusText.isEmpty ? statusText : t("Pronto.", "Ready."))
                 .font(.caption)
                 .lineLimit(1)
             Spacer(minLength: 8)
@@ -2158,7 +2166,7 @@ struct ContentView: View {
             }
 
             if hasMessage && !isCheckingConnectivity {
-                Button("Limpar") {
+                Button(t("Limpar", "Clear")) {
                     showScanBanner = false
                     bannerIsError = false
                     scanBannerMessage = ""
