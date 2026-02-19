@@ -825,13 +825,14 @@ enum ConnectivityChecker {
 
     private static func toolExitCode(_ output: String?) -> Int? {
         guard let output, !output.isEmpty else { return nil }
+        var lastExit: Int? = nil
         for line in output.split(whereSeparator: \.isNewline) {
             let text = String(line)
             if text.hasPrefix("EXIT: ") {
-                return Int(text.replacingOccurrences(of: "EXIT: ", with: "").trimmingCharacters(in: .whitespaces))
+                lastExit = Int(text.replacingOccurrences(of: "EXIT: ", with: "").trimmingCharacters(in: .whitespaces))
             }
         }
-        return nil
+        return lastExit
     }
 
     private static func curlLooksOnline(_ output: String?) -> Bool? {
@@ -1031,8 +1032,22 @@ enum ConnectivityChecker {
         guard !raw.isEmpty else { return nil }
         guard let curlPath = resolveCurlPath() else { return nil }
         let normalized = normalizedURLInput(raw)
-        // -I: headers only, keep short timeouts.
-        return await runGenericTool(executablePath: curlPath, args: ["-I", "--connect-timeout", "2", "--max-time", "3", "-sS", normalized], timeout: 3.3)
+        let isHTTPS = normalized.lowercased().hasPrefix("https://")
+
+        // Probe principal: HEAD curto. Para HTTPS usamos -k para não derrubar reachability por cert self-signed.
+        let headArgs = ["-I", "--connect-timeout", "2", "--max-time", "3", "-sS"] + (isHTTPS ? ["-k"] : []) + [normalized]
+        let head = await runGenericTool(executablePath: curlPath, args: headArgs, timeout: 3.3)
+
+        // Se já ficou claro que está online, retorna direto.
+        if curlLooksOnline(head) == true {
+            return head
+        }
+
+        // Fallback: alguns serviços não respondem bem a HEAD/TLS específico.
+        // Tenta GET com headers para preservar detecção de "http/" no parser.
+        let getArgs = ["-i", "--connect-timeout", "2", "--max-time", "3", "-sS"] + (isHTTPS ? ["-k"] : []) + [normalized]
+        let get = await runGenericTool(executablePath: curlPath, args: getArgs, timeout: 3.3)
+        return [head, "---\nCURL_FALLBACK_GET\n" + get].joined(separator: "\n")
     }
 
     private static func routeDiagnosticsIfAvailable(host: String) async -> String? {

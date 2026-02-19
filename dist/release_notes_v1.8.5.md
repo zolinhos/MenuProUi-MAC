@@ -3,6 +3,8 @@
 ## Correções
 - Corrigido falso positivo de conectividade para URL quando `curl` retorna timeout (`exit 28`) e apenas `nc/tcp` indicam porta aberta.
 - Agora endpoints sem resposta HTTP/HTTPS efetiva são marcados como `offline` nesse cenário.
+- Ajustado probe de URL HTTPS para reduzir falso `offline` em serviços ativos com certificado self-signed/inválido.
+- `curl` agora usa fallback adicional (HEAD + GET) e o parser considera o `EXIT` da última tentativa no bloco de diagnóstico.
 
 ## Melhoria de interface
 - Adicionada barra fixa de status no rodapé da aplicação.
